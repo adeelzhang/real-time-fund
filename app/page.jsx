@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useMemo, useCallback, useTransition, useDeferredValue } from 'react';
+import Image from 'next/image';
 import SearchBar from './components/SearchBar';
 import SummaryTabContent from './components/SummaryTabContent';
 import FundListView from './components/FundListView';
@@ -4546,24 +4547,23 @@ export default function HomePage() {
                       <path d="M12 12v9" stroke="var(--accent)" />
                       <path d="m16 16-4-4-4 4" stroke="var(--accent)" />
                     </svg>
-                    {/* 默认图标 */}
-                    <svg
+                    <Image
+                      src="/guji-icon-32-v2.png"
+                      alt=""
+                      aria-hidden="true"
                       width="24"
                       height="24"
-                      viewBox="0 0 24 24"
-                      fill="none"
+                      unoptimized
                       style={{
                         position: 'absolute',
                         inset: 0,
                         margin: 'auto',
+                        borderRadius: 5,
                         opacity: isSyncing ? 0 : 1,
                         transform: isSyncing ? 'translateY(-4px)' : 'translateY(0px)',
                         transition: 'opacity 0.25s ease, transform 0.25s ease'
                       }}
-                    >
-                      <circle cx="12" cy="12" r="10" stroke="var(--accent)" strokeWidth="2" />
-                      <path d="M5 14c2-4 7-6 14-5" stroke="var(--primary)" strokeWidth="2" />
-                    </svg>
+                    />
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
