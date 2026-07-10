@@ -139,7 +139,12 @@ export default function MarketTab({ onAddFund, getFundCardProps, isActive }) {
   }, [sectorEstimates, sectorFilter, sectorSort, sectorSortOrder, isMobile]);
 
   // Query for Valuation Ranking
-  const { data: rankingData, isLoading: rankingLoading } = useQuery({
+  const {
+    data: rankingData,
+    isLoading: rankingLoading,
+    isError: rankingError,
+    error: rankingErrorDetail
+  } = useQuery({
     queryKey: ['valuationRanking', activeTab, pageIndex],
     queryFn: async () => {
       let sort = 3;
@@ -160,7 +165,9 @@ export default function MarketTab({ onAddFund, getFundCardProps, isActive }) {
       return res?.Data?.list || [];
     },
     enabled: !!isActive,
-    staleTime: 120000
+    staleTime: 120000,
+    retry: 1,
+    refetchOnWindowFocus: false
   });
 
   const formatPercent = (val) => {
@@ -700,6 +707,10 @@ export default function MarketTab({ onAddFund, getFundCardProps, isActive }) {
                       </div>
                     </div>
                   ))
+                ) : rankingError ? (
+                  <div className="py-8 px-4 text-center text-sm text-muted-foreground">
+                    行情数据暂不可用：{rankingErrorDetail?.message || '请稍后重试'}
+                  </div>
                 ) : rankingTable.getRowModel().rows.length > 0 ? (
                   rankingTable.getRowModel().rows.map((row, index) => (
                     <div

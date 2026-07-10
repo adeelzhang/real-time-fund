@@ -2358,20 +2358,41 @@ export const parseFundTextWithLLM = async (text) => {
  * @returns {Promise<{Data: {list: Array, allRecords: number}} | null>}
  */
 export const fetchFundValuationRanking = async (sort = 3, order = 'desc', page = 1, pageSize = 20) => {
-  if (!isSupabaseConfigured) return null;
-  if (!supabase?.functions?.invoke) return null;
+  const requestBody = { sort, order, page, pageSize };
 
-  const { data, error } = await withRetry(() =>
-    supabase.functions.invoke('fund-valuation-ranking', {
-      body: { sort, order, page, pageSize }
-    })
-  );
+  try {
+    const data = await withRetry(async () => {
+      const response = await fetch('/api/fund-valuation-ranking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+        cache: 'no-store'
+      });
 
-  if (error) throw new Error(error.message || '加载估值排行失败');
-  if (!data || data.success !== true) throw new Error(data?.error || '加载估值排行失败');
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.error || `加载估值排行失败 (${response.status})`);
+      }
+      return payload;
+    });
 
-  // 保持与原 JSONP 返回结构一致：{ Data: { list: [...], ... } }
-  return { Data: data.data };
+    if (!data || data.success !== true) throw new Error(data?.error || '加载估值排行失败');
+    return { Data: data.data };
+  } catch (proxyError) {
+    if (!isSupabaseConfigured || !supabase?.functions?.invoke) throw proxyError;
+
+    const { data, error } = await withRetry(() =>
+      supabase.functions.invoke('fund-valuation-ranking', {
+        body: requestBody
+      })
+    );
+
+    if (error) throw new Error(error.message || proxyError?.message || '加载估值排行失败');
+    if (!data || data.success !== true) throw new Error(data?.error || proxyError?.message || '加载估值排行失败');
+
+    // 保持与原 JSONP 返回结构一致：{ Data: { list: [...], ... } }
+    return { Data: data.data };
+  }
 };
 
 /**

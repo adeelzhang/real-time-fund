@@ -7,7 +7,9 @@ import time
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib import error as urllib_error
+from urllib import request as urllib_request
+from urllib.parse import urlencode, urlparse
 from zoneinfo import ZoneInfo
 
 
@@ -16,6 +18,7 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 ANALYTICS_SALT = os.environ.get("ANALYTICS_SALT", "guji")
 STATS_TZ = os.environ.get("STATS_TZ", "Asia/Shanghai")
 MAX_BODY = 16 * 1024
+MARKET_MAX_BODY = 1024
 
 
 def now_ts():
@@ -98,7 +101,7 @@ def json_response(handler, data, status=HTTPStatus.OK):
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Cache-Control", "no-store")
     handler.send_header("Access-Control-Allow-Origin", "*")
-    handler.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password")
+    handler.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password, Authorization, apikey")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
     handler.wfile.write(body)
@@ -366,6 +369,82 @@ def record_event(handler):
     json_response(handler, {"ok": True})
 
 
+def bounded_int(value, default, min_value, max_value):
+    try:
+        parsed = int(value)
+    except Exception:
+        parsed = default
+    return max(min_value, min(parsed, max_value))
+
+
+def fetch_fund_valuation_ranking(handler):
+    length = int(handler.headers.get("Content-Length", "0") or "0")
+    if length < 0 or length > MARKET_MAX_BODY:
+        json_response(handler, {"success": False, "error": "invalid body"}, HTTPStatus.BAD_REQUEST)
+        return
+
+    try:
+        payload = json.loads(handler.rfile.read(length).decode("utf-8")) if length else {}
+    except Exception:
+        json_response(handler, {"success": False, "error": "invalid json"}, HTTPStatus.BAD_REQUEST)
+        return
+
+    sort = bounded_int(payload.get("sort"), 3, 3, 5)
+    order = "asc" if str(payload.get("order", "desc")).lower() == "asc" else "desc"
+    page = bounded_int(payload.get("page"), 1, 1, 200)
+    page_size = bounded_int(payload.get("pageSize"), 20, 1, 100)
+
+    params = urlencode(
+        {
+            "type": 1,
+            "sort": sort,
+            "orderType": order,
+            "canbuy": 0,
+            "pageIndex": page,
+            "pageSize": page_size,
+        }
+    )
+    api_url = f"https://api.fund.eastmoney.com/FundGuZhi/GetFundGZList?{params}"
+    req = urllib_request.Request(
+        api_url,
+        headers={
+            "Accept": "application/json,text/plain,*/*",
+            "Referer": "https://fund.eastmoney.com/",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+        },
+    )
+
+    try:
+        with urllib_request.urlopen(req, timeout=12) as response:
+            raw = response.read(2 * 1024 * 1024)
+        upstream_data = json.loads(raw.decode("utf-8-sig"))
+    except urllib_error.HTTPError as err:
+        json_response(
+            handler,
+            {"success": False, "error": f"天天基金接口请求失败 ({err.code})"},
+            HTTPStatus.BAD_GATEWAY,
+        )
+        return
+    except Exception as err:
+        json_response(
+            handler,
+            {"success": False, "error": f"天天基金接口请求失败: {sanitize(err, 160)}"},
+            HTTPStatus.BAD_GATEWAY,
+        )
+        return
+
+    data = upstream_data.get("Data") if isinstance(upstream_data, dict) else None
+    if not isinstance(data, dict):
+        json_response(handler, {"success": False, "error": "天天基金接口返回格式异常"}, HTTPStatus.BAD_GATEWAY)
+        return
+
+    json_response(handler, {"success": True, "data": data})
+
+
 OPS_HTML = r"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -574,7 +653,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password, Authorization, apikey")
         self.end_headers()
 
     def do_GET(self):
@@ -604,6 +683,9 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/analytics/track":
             record_event(self)
+            return
+        if parsed.path == "/api/fund-valuation-ranking":
+            fetch_fund_valuation_ranking(self)
             return
         json_response(self, {"ok": False, "error": "not found"}, HTTPStatus.NOT_FOUND)
 
