@@ -1,22 +1,10 @@
 'use client';
 
 import Image from 'next/image';
-import { ChevronRight, QrCode } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { LoginIcon } from './Icons';
 
-export default function MineTab({
-  visible = true,
-  user,
-  userAvatar,
-  lastSyncDisplay,
-  onLogin,
-  onMyEarnings,
-  onTutorial,
-  onUpdateLog,
-  onFeedback,
-  onSponsorSupport,
-  onOpenWeChat
-}) {
+export default function MineTab({ visible = true, user, userAvatar, lastSyncDisplay, onLogin, onMyEarnings }) {
   return (
     <div className="mine-tab" style={{ display: visible ? undefined : 'none' }} aria-hidden={!visible || undefined}>
       <section className="mine-profile-card glass" aria-label="个人信息" style={{ position: 'relative' }}>
@@ -66,53 +54,12 @@ export default function MineTab({
             )}
           </div>
         </div>
-        <a
-          className="ocr-quota-badge"
-          style={{
-            position: 'absolute',
-            bottom: 12,
-            right: 12,
-            cursor: 'pointer',
-            textDecoration: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4
-          }}
-          onClick={onOpenWeChat}
-        >
-          <QrCode size={14} />
-          加入微信用户支持群
-        </a>
       </section>
 
       <ul className="mine-menu-list" role="list">
         <li>
           <button type="button" className="mine-menu-row glass" onClick={onMyEarnings}>
             <span className="mine-menu-label">我的收益</span>
-            <ChevronRight className="mine-menu-chevron" aria-hidden strokeWidth={2} />
-          </button>
-        </li>
-        <li>
-          <button type="button" className="mine-menu-row glass" onClick={onTutorial}>
-            <span className="mine-menu-label">使用帮助</span>
-            <ChevronRight className="mine-menu-chevron" aria-hidden strokeWidth={2} />
-          </button>
-        </li>
-        <li>
-          <button type="button" className="mine-menu-row glass" onClick={onUpdateLog}>
-            <span className="mine-menu-label">更新日志</span>
-            <ChevronRight className="mine-menu-chevron" aria-hidden strokeWidth={2} />
-          </button>
-        </li>
-        <li>
-          <button type="button" className="mine-menu-row glass" onClick={onFeedback}>
-            <span className="mine-menu-label">问题反馈</span>
-            <ChevronRight className="mine-menu-chevron" aria-hidden strokeWidth={2} />
-          </button>
-        </li>
-        <li>
-          <button type="button" className="mine-menu-row glass" onClick={onSponsorSupport}>
-            <span className="mine-menu-label">赞助支持</span>
             <ChevronRight className="mine-menu-chevron" aria-hidden strokeWidth={2} />
           </button>
         </li>

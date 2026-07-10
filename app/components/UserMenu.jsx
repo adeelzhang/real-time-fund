@@ -6,8 +6,7 @@ import dayjs from 'dayjs';
 import Image from 'next/image';
 import { AnimatePresence, motion } from 'framer-motion';
 import ConfirmModal from './ConfirmModal';
-import { HelpCircle } from 'lucide-react';
-import { CalendarIcon, LoginIcon, LogoutIcon, SettingsIcon, UserIcon, ListIcon } from './Icons';
+import { CalendarIcon, LoginIcon, LogoutIcon, SettingsIcon, UserIcon } from './Icons';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 export default function UserMenu({
@@ -21,9 +20,7 @@ export default function UserMenu({
   onOpenPortfolioEarnings,
   onOpenLogin,
   onLogout,
-  onLogoutConfirmOpenChange,
-  onTutorial,
-  onUpdateLog
+  onLogoutConfirmOpenChange
 }) {
   const isMobile = useIsMobile();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -135,26 +132,6 @@ export default function UserMenu({
                         <CalendarIcon width="16" height="16" />
                         <span>我的收益</span>
                       </button>
-                      <button
-                        className="user-menu-item"
-                        onClick={() => {
-                          setUserMenuOpen(false);
-                          onTutorial?.();
-                        }}
-                      >
-                        <HelpCircle width="16" height="16" />
-                        <span>使用帮助</span>
-                      </button>
-                      <button
-                        className="user-menu-item"
-                        onClick={() => {
-                          setUserMenuOpen(false);
-                          onUpdateLog?.();
-                        }}
-                      >
-                        <ListIcon width="16" height="16" />
-                        <span>更新日志</span>
-                      </button>
                     </>
                   )}
                   <Tooltip>
@@ -251,26 +228,6 @@ export default function UserMenu({
                       >
                         <CalendarIcon width="16" height="16" />
                         <span>我的收益</span>
-                      </button>
-                      <button
-                        className="user-menu-item"
-                        onClick={() => {
-                          setUserMenuOpen(false);
-                          onTutorial?.();
-                        }}
-                      >
-                        <HelpCircle width="16" height="16" />
-                        <span>使用帮助</span>
-                      </button>
-                      <button
-                        className="user-menu-item"
-                        onClick={() => {
-                          setUserMenuOpen(false);
-                          onUpdateLog?.();
-                        }}
-                      >
-                        <ListIcon width="16" height="16" />
-                        <span>更新日志</span>
                       </button>
                     </>
                   )}

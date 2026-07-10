@@ -2,7 +2,7 @@
 
 ## OVERVIEW
 
-47 app-specific React components (all client-side). Modals dominate (~26). Core display: FundCard, PcFundTable, MobileFundTable.
+App-specific React components. Core display: FundCard, PcFundTable, MobileFundTable.
 
 ## STRUCTURE
 
@@ -15,13 +15,13 @@ app/components/
 │   ├── MobileFundCardDrawer.jsx# Mobile fund detail drawer
 │   ├── GroupSummary.jsx        # Group portfolio summary
 │   └── MarketIndexAccordion.jsx# Market indices (24 A/HK/US)
-├── Modals (26)
+├── Modals
 │   ├── Fund ops: AddFundToGroupModal, GroupManageModal, GroupModal
 │   ├── Trading: TradeModal, HoldingEditModal, HoldingActionModal, TransactionHistoryModal, PendingTradesModal, DcaModal, AddHistoryModal
 │   ├── Settings: SettingsModal, MarketSettingModal, MobileSettingModal, PcTableSettingModal, SortSettingModal
 │   ├── Auth: LoginModal, CloudConfigModal
 │   ├── Scan: ScanPickModal, ScanProgressModal, ScanImportConfirmModal, ScanImportProgressModal
-│   └── Misc: ConfirmModal, SuccessModal, DonateModal, FeedbackModal, WeChatModal, UpdatePromptModal, FundHistoryNetValueModal
+│   └── Misc: ConfirmModal, SuccessModal, FundHistoryNetValueModal
 ├── Charts (3)
 │   ├── FundIntradayChart.jsx   # Intraday valuation chart (localStorage data)
 │   ├── FundTrendChart.jsx      # Fund trend chart (pingzhongdata)
@@ -35,7 +35,7 @@ app/components/
     ├── Announcement.jsx        # Banner announcement
     ├── ThemeColorSync.jsx      # Theme meta tag sync
     ├── PwaRegister.jsx         # Service worker registration
-    └── AnalyticsGate.jsx       # Conditional GA loader
+    └── SelfAnalytics.jsx       # Same-origin analytics tracker
 ```
 
 ## CONVENTIONS

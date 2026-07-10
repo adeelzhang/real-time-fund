@@ -9,9 +9,6 @@ import { useModalStore } from '../stores';
 
 // 低频弹窗：懒加载
 const CloudConfigModal = dynamic(() => import('./CloudConfigModal'), { ssr: false });
-const DonateModal = dynamic(() => import('./DonateModal'), { ssr: false });
-const FeedbackModal = dynamic(() => import('./FeedbackModal'), { ssr: false });
-const WeChatModal = dynamic(() => import('./WeChatModal'), { ssr: false });
 const DcaModal = dynamic(() => import('./DcaModal'), { ssr: false });
 const FundConvertModal = dynamic(() => import('./FundConvertModal'), { ssr: false });
 const SelectFundSingleModal = dynamic(() => import('./SelectFundSingleModal'), { ssr: false });
@@ -35,8 +32,6 @@ import SettingsModal from './SettingsModal';
 import SuccessModal from './SuccessModal';
 import TradeModal from './TradeModal';
 import TransactionHistoryModal from './TransactionHistoryModal';
-import TutorialDrawer from './TutorialDrawer';
-import UpdateLogModal from './UpdateLogModal';
 import SortSettingModal from './SortSettingModal';
 import AddFundToGroupModal from './AddFundToGroupModal';
 import FundDataSourceSelector from './FundDataSourceSelector';
@@ -79,14 +74,8 @@ function ModalsLayerContent({ callbacksRef }) {
 
   // ========== Modal 开关状态订阅 ==========
   const settingsOpen = useModalStore((s) => s.settingsOpen);
-  const feedbackOpen = useModalStore((s) => s.feedbackOpen);
-  const feedbackNonce = useModalStore((s) => s.feedbackNonce);
-  const weChatOpen = useModalStore((s) => s.weChatOpen);
-  const donateOpen = useModalStore((s) => s.donateOpen);
   const loginModalOpen = useModalStore((s) => s.loginModalOpen);
   const loginInitialError = useModalStore((s) => s.loginInitialError);
-  const tutorialDrawerOpen = useModalStore((s) => s.tutorialDrawerOpen);
-  const updateLogOpen = useModalStore((s) => s.updateLogOpen);
   const portfolioEarningsOpen = useModalStore((s) => s.portfolioEarningsOpen);
   const mobileFundDrawerOpen = useModalStore((s) => s.mobileFundDrawerOpen);
   const mobileTableSettingModalOpen = useModalStore((s) => s.mobileTableSettingModalOpen);
@@ -136,13 +125,8 @@ function ModalsLayerContent({ callbacksRef }) {
   const _ms = useModalStore.setState;
   const _gs = useModalStore.getState;
   const setSettingsOpen = (v) => _ms({ settingsOpen: isFunction(v) ? v(_gs().settingsOpen) : v });
-  const setFeedbackOpen = (v) => _ms({ feedbackOpen: isFunction(v) ? v(_gs().feedbackOpen) : v });
-  const setWeChatOpen = (v) => _ms({ weChatOpen: isFunction(v) ? v(_gs().weChatOpen) : v });
-  const setDonateOpen = (v) => _ms({ donateOpen: isFunction(v) ? v(_gs().donateOpen) : v });
   const setLoginModalOpen = (v) => _ms({ loginModalOpen: isFunction(v) ? v(_gs().loginModalOpen) : v });
   const setLoginInitialError = (v) => _ms({ loginInitialError: isFunction(v) ? v(_gs().loginInitialError) : v });
-  const setTutorialDrawerOpen = (v) => _ms({ tutorialDrawerOpen: isFunction(v) ? v(_gs().tutorialDrawerOpen) : v });
-  const setUpdateLogOpen = (v) => _ms({ updateLogOpen: isFunction(v) ? v(_gs().updateLogOpen) : v });
   const setSortSettingOpen = (v) => _ms({ sortSettingOpen: isFunction(v) ? v(_gs().sortSettingOpen) : v });
   const setAllSectorsModalOpen = (v) => _ms({ allSectorsModalOpen: isFunction(v) ? v(_gs().allSectorsModalOpen) : v });
   const setGroupModalOpen = (v) => _ms({ groupModalOpen: isFunction(v) ? v(_gs().groupModalOpen) : v });
@@ -273,18 +257,6 @@ function ModalsLayerContent({ callbacksRef }) {
         )}
       </AnimatePresence>
 
-      {/* ===== Modal: 反馈 ===== */}
-      <AnimatePresence>
-        {feedbackOpen && (
-          <FeedbackModal
-            key={feedbackNonce}
-            onClose={() => setFeedbackOpen(false)}
-            user={cb.current.user}
-            onOpenWeChat={() => setWeChatOpen(true)}
-          />
-        )}
-      </AnimatePresence>
-
       {/* ===== Modal: 每日收益 ===== */}
       <MyEarningsCalendarPage
         open={portfolioEarningsOpen}
@@ -295,17 +267,6 @@ function ModalsLayerContent({ callbacksRef }) {
           setPortfolioEarningsOpen(false);
         }}
       />
-
-      {/* ===== Modal: 微信 ===== */}
-      <AnimatePresence>{weChatOpen && <WeChatModal onClose={() => setWeChatOpen(false)} />}</AnimatePresence>
-
-      {/* ===== Drawer: 使用教程 ===== */}
-      <AnimatePresence>
-        {tutorialDrawerOpen && <TutorialDrawer open onOpenChange={setTutorialDrawerOpen} />}
-      </AnimatePresence>
-
-      {/* ===== Modal: 更新日志 ===== */}
-      <AnimatePresence>{updateLogOpen && <UpdateLogModal open onOpenChange={setUpdateLogOpen} />}</AnimatePresence>
 
       {/* ===== Modal: 全部板块 ===== */}
       <AnimatePresence>
@@ -802,9 +763,6 @@ function ModalsLayerContent({ callbacksRef }) {
           />
         )}
       </AnimatePresence>
-
-      {/* ===== Modal: 打赏 ===== */}
-      <AnimatePresence>{donateOpen && <DonateModal onClose={() => setDonateOpen(false)} />}</AnimatePresence>
 
       {/* ===== Modal: 分组管理 ===== */}
       <AnimatePresence>

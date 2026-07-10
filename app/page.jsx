@@ -1,14 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState, useMemo, useCallback, useTransition, useDeferredValue } from 'react';
-import dynamic from 'next/dynamic';
 import SearchBar from './components/SearchBar';
 import SummaryTabContent from './components/SummaryTabContent';
 import FundListView from './components/FundListView';
 import NavLayout from './components/NavLayout';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import Image from 'next/image';
 
 import { createAvatar } from '@dicebear/core';
 import { identicon } from '@dicebear/collection';
@@ -31,9 +29,7 @@ import GroupAccountSummaryCard from './components/GroupAccountSummaryCard';
 import { CloseIcon, GridIcon, ListIcon, MoonIcon, PlusIcon, SettingsIcon, SortIcon, SunIcon } from './components/Icons';
 import UserMenu from './components/UserMenu';
 import RefreshButton from './components/RefreshButton';
-const UpdateChecker = dynamic(() => import('./components/UpdateChecker'), { ssr: false });
 import MarketIndexAccordion from './components/MarketIndexAccordion';
-import githubImg from './assets/github.svg';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { getAllValuationSeries, clearFund } from './lib/valuationTimeseries';
 import { aggregatePortfolioDailyEarnings } from './lib/dailyEarnings';
@@ -322,19 +318,13 @@ export default function HomePage() {
   const setSortSettingOpen = (v) => _ms({ sortSettingOpen: isFunction(v) ? v(_gs().sortSettingOpen) : v });
   const setLoginModalOpen = (v) => _ms({ loginModalOpen: isFunction(v) ? v(_gs().loginModalOpen) : v });
   const setLoginInitialError = (v) => _ms({ loginInitialError: isFunction(v) ? v(_gs().loginInitialError) : v });
-  const setFeedbackOpen = (v) => _ms({ feedbackOpen: isFunction(v) ? v(_gs().feedbackOpen) : v });
-  const setFeedbackNonce = (v) => _ms({ feedbackNonce: isFunction(v) ? v(_gs().feedbackNonce) : v });
-  const setDonateOpen = (v) => _ms({ donateOpen: isFunction(v) ? v(_gs().donateOpen) : v });
   const setIsLogoutConfirmOpen = (v) => _ms({ isLogoutConfirmOpen: isFunction(v) ? v(_gs().isLogoutConfirmOpen) : v });
   const setPortfolioEarningsOpen = (v) =>
     _ms({ portfolioEarningsOpen: isFunction(v) ? v(_gs().portfolioEarningsOpen) : v });
   const setMobileFundDrawerOpen = (v) =>
     _ms({ mobileFundDrawerOpen: isFunction(v) ? v(_gs().mobileFundDrawerOpen) : v });
-  const setTutorialDrawerOpen = (v) => _ms({ tutorialDrawerOpen: isFunction(v) ? v(_gs().tutorialDrawerOpen) : v });
-  const setUpdateLogOpen = (v) => _ms({ updateLogOpen: isFunction(v) ? v(_gs().updateLogOpen) : v });
   const setMobileTableSettingModalOpen = (v) =>
     _ms({ mobileTableSettingModalOpen: isFunction(v) ? v(_gs().mobileTableSettingModalOpen) : v });
-  const setIsUpdateModalOpen = (v) => _ms({ isUpdateModalOpen: isFunction(v) ? v(_gs().isUpdateModalOpen) : v });
   const setHoldingModal = (v) => _ms({ holdingModal: isFunction(v) ? v(_gs().holdingModal) : v });
   const setActionModal = (v) => _ms({ actionModal: isFunction(v) ? v(_gs().actionModal) : v });
   const setTradeModal = (v) => _ms({ tradeModal: isFunction(v) ? v(_gs().tradeModal) : v });
@@ -4580,7 +4570,7 @@ export default function HomePage() {
                   <p>{isSyncing ? '正在同步到云端...' : undefined}</p>
                 </TooltipContent>
               </Tooltip>
-              <span>基估宝</span>
+              <span>估基</span>
             </div>
             <div
               className={`glass add-fund-section navbar-add-fund ${isSearchFocused || selectedFunds.length > 0 ? 'search-focused' : ''}`}
@@ -4624,16 +4614,6 @@ export default function HomePage() {
               )}
             </div>
             <div className={`actions ${isSearchFocused || selectedFunds.length > 0 ? 'search-focused-sibling' : ''}`}>
-              <UpdateChecker onModalOpenChange={setIsUpdateModalOpen} />
-              <span className="github-icon-wrap">
-                <Image
-                  unoptimized
-                  alt="项目Github地址"
-                  src={githubImg}
-                  style={{ width: '30px', height: '30px', cursor: 'pointer' }}
-                  onClick={() => window.open('https://github.com/hzm0321/real-time-fund')}
-                />
-              </span>
               {isMobile && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -4686,14 +4666,6 @@ export default function HomePage() {
                 onOpenLogin={handleOpenLogin}
                 onLogout={handleLogout}
                 onLogoutConfirmOpenChange={setIsLogoutConfirmOpen}
-                onTutorial={() => {
-                  if (isMobile) {
-                    setTutorialDrawerOpen(true);
-                  } else {
-                    window.open('https://www.yuque.com/u267605/ookgim/im06q8tembbld6im?singleDoc', '_blank');
-                  }
-                }}
-                onUpdateLog={() => setUpdateLogOpen(true)}
               />
             </div>
           </div>
@@ -5294,87 +5266,6 @@ export default function HomePage() {
                     数据源：实时估值与重仓直连东方财富，仅供个人学习及参考使用。数据可能存在延迟，不作为任何投资建议
                   </p>
                   <p style={{ marginBottom: 12 }}>注：估算数据与真实结算数据会有1%左右误差，非股票型基金误差较大</p>
-                  <div
-                    style={{
-                      marginTop: 12,
-                      opacity: 0.8,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 8
-                    }}
-                  >
-                    <p style={{ margin: 0 }}>
-                      遇到任何问题或需求建议可
-                      <button
-                        className="link-button"
-                        onClick={() => {
-                          if (!user?.id) {
-                            sonnerToast.error('请先登录后再提交反馈');
-                            return;
-                          }
-                          setFeedbackNonce((n) => n + 1);
-                          setFeedbackOpen(true);
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--primary)',
-                          cursor: 'pointer',
-                          padding: '0 4px',
-                          textDecoration: 'underline',
-                          fontSize: 'inherit',
-                          fontWeight: 600
-                        }}
-                      >
-                        点此提交反馈
-                      </button>
-                      ，或
-                      <button
-                        className="link-button"
-                        onClick={() => _ms({ weChatOpen: true })}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--primary)',
-                          cursor: 'pointer',
-                          padding: '0 4px',
-                          textDecoration: 'underline',
-                          fontSize: 'inherit',
-                          fontWeight: 600
-                        }}
-                      >
-                        加入微信用户支持群
-                      </button>
-                    </p>
-                    <button
-                      onClick={() => setDonateOpen(true)}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--muted)',
-                        fontSize: '12px',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        padding: '4px 8px',
-                        borderRadius: '6px',
-                        transition: 'all 0.2s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.color = 'var(--primary)';
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color = 'var(--muted)';
-                        e.currentTarget.style.background = 'transparent';
-                      }}
-                    >
-                      <span>☕</span>
-                      <span>点此请作者喝杯咖啡</span>
-                    </button>
-                  </div>
                 </>
               )}
             </div>
@@ -5398,24 +5289,6 @@ export default function HomePage() {
           lastSyncDisplay={lastSyncTime ? dayjs(lastSyncTime).format('MM-DD HH:mm') : null}
           onLogin={handleOpenLogin}
           onMyEarnings={() => setPortfolioEarningsOpen(true)}
-          onTutorial={() => {
-            if (isMobile) {
-              setTutorialDrawerOpen(true);
-            } else {
-              window.open('https://www.yuque.com/u267605/ookgim/im06q8tembbld6im?singleDoc', '_blank');
-            }
-          }}
-          onUpdateLog={() => setUpdateLogOpen(true)}
-          onFeedback={() => {
-            if (!user?.id) {
-              sonnerToast.error('请先登录后再提交反馈');
-              return;
-            }
-            setFeedbackNonce((n) => n + 1);
-            setFeedbackOpen(true);
-          }}
-          onSponsorSupport={() => setDonateOpen(true)}
-          onOpenWeChat={() => _ms({ weChatOpen: true })}
         />
       )}
       {/* 弹框渲染层 - 独立组件，订阅 useModalStore，不触发 page.jsx 重渲染 */}

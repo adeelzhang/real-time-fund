@@ -26,14 +26,8 @@ const DEFAULTS = {
 
 const getClosedModalState = () => ({
   settingsOpen: false,
-  feedbackOpen: false,
-  weChatOpen: false,
-  donateOpen: false,
   loginModalOpen: false,
   loginInitialError: '',
-  tutorialDrawerOpen: false,
-  updateLogOpen: false,
-  isUpdateModalOpen: false,
   isLogoutConfirmOpen: false,
   mobileTableSettingModalOpen: false,
   mobileFundDrawerOpen: false,
@@ -76,15 +70,8 @@ const getClosedModalState = () => ({
 export const useModalStore = create((set, get) => ({
   // ---- Simple boolean modals ----
   settingsOpen: false,
-  feedbackOpen: false,
-  feedbackNonce: 0,
-  weChatOpen: false,
-  donateOpen: false,
   loginModalOpen: false,
   loginInitialError: '',
-  tutorialDrawerOpen: false,
-  updateLogOpen: false,
-  isUpdateModalOpen: false,
   isLogoutConfirmOpen: false,
   mobileTableSettingModalOpen: false,
   mobileFundDrawerOpen: false,

@@ -1,9 +1,9 @@
 import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
-import AnalyticsGate from './components/AnalyticsGate';
 import KeepScreenAwake from './components/KeepScreenAwake';
 import PwaRegister from './components/PwaRegister';
 import ThemeColorSync from './components/ThemeColorSync';
+import SelfAnalytics from './components/SelfAnalytics';
 import ClientErrorBoundary from './components/ClientErrorBoundary';
 import GlobalClientErrorHandler from './components/GlobalClientErrorHandler';
 import { QueryClientProviderWrapper } from './providers/query-client-provider';
@@ -11,17 +11,15 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import packageJson from '../package.json';
 
 export const metadata = {
-  title: `基估宝 V${packageJson.version}`,
+  title: `估基 V${packageJson.version}`,
   description: '输入基金编号添加基金，实时显示估值与前10重仓'
 };
 
 export default function RootLayout({ children }) {
-  const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
-
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <meta name="apple-mobile-web-app-title" content="基估宝" />
+        <meta name="apple-mobile-web-app-title" content="估基" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <link rel="apple-touch-icon" href="/Icon-60@3x.png?v=1" />
@@ -41,7 +39,7 @@ export default function RootLayout({ children }) {
         <ThemeColorSync />
         <KeepScreenAwake />
         <PwaRegister />
-        <AnalyticsGate GA_ID={GA_ID} />
+        <SelfAnalytics />
         <QueryClientProviderWrapper>
           <TooltipProvider>
             <ClientErrorBoundary toastTitle="页面渲染异常" toastId="app-render-error" closeModals>

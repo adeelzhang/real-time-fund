@@ -1930,41 +1930,6 @@ export const fetchMarketIndices = async () => {
   });
 };
 
-export const fetchLatestRelease = async () => {
-  const url = process.env.NEXT_PUBLIC_GITHUB_LATEST_RELEASE_URL;
-  if (!url) return null;
-
-  try {
-    const data = await withRetry(
-      async () => {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        return res.json();
-      },
-      2,
-      500
-    );
-
-    if (!data || !data.tag_name) return null;
-
-    return {
-      tagName: data.tag_name,
-      body: data.body || ''
-    };
-  } catch (err) {
-    console.error('fetchLatestRelease failed after retries:', err);
-    return null;
-  }
-};
-
-export const submitFeedback = async (formData) => {
-  const response = await fetch('https://api.web3forms.com/submit', {
-    method: 'POST',
-    body: formData
-  });
-  return response.json();
-};
-
 const PINGZHONGDATA_GLOBAL_KEYS = [
   'ishb',
   'fS_name',

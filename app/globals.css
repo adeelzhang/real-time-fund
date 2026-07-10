@@ -366,11 +366,6 @@ body::before {
   box-shadow: 0 6px 16px rgba(220, 38, 38, 0.25);
 }
 
-/* 亮色主题：GitHub 图标加深，提升在浅色背景上的可见度 */
-[data-theme='light'] .github-icon-wrap img {
-  filter: brightness(0.4);
-}
-
 [data-theme='light'] .icon-button[aria-busy='true'] {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
 }
@@ -1236,10 +1231,6 @@ input[type='number'] {
   color: var(--danger);
   font-size: 12px;
   margin-top: 4px;
-}
-
-.feedback-modal {
-  max-width: 420px !important;
 }
 
 .link-button:hover {
@@ -4513,35 +4504,6 @@ html::-webkit-scrollbar-thumb:active,
   background: rgba(52, 211, 153, 0.15);
   border: 1px solid rgba(52, 211, 153, 0.3);
   color: var(--success);
-}
-
-/* ========== GitHub 登录按钮样式 ========== */
-.github-login-btn {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.github-login-btn:hover {
-  border-color: var(--primary);
-  background: rgba(34, 211, 238, 0.05);
-}
-
-.github-login-btn:active {
-  transform: scale(0.98);
-}
-
-[data-theme='light'] .github-login-btn {
-  background: #f8fafc;
-  border-color: #e2e8f0;
-}
-
-[data-theme='light'] .github-login-btn:hover {
-  background: #f1f5f9;
-  border-color: #94a3af;
-}
-
-[data-theme='light'] .github-login-btn img {
-  filter: brightness(0.2);
 }
 
 .button.secondary {

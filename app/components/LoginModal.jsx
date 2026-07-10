@@ -1,11 +1,9 @@
 'use client';
 import { useIsMobile } from '@/app/hooks/useIsMobile';
 
-import Image from 'next/image';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { MailIcon } from './Icons';
-import githubImg from '../assets/github.svg';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export default function LoginModal({ onClose, showToast, isExplicitLoginRef, initialError = '' }) {
@@ -98,29 +96,6 @@ export default function LoginModal({ onClose, showToast, isExplicitLoginRef, ini
       if (isExplicitLoginRef) isExplicitLoginRef.current = false;
     }
     setLoginLoading(false);
-  };
-
-  const handleGithubLogin = async () => {
-    setLoginError('');
-    if (!isSupabaseConfigured) {
-      showToast('未配置 Supabase，无法登录', 'error');
-      return;
-    }
-    try {
-      if (isExplicitLoginRef) isExplicitLoginRef.current = true;
-      setLoginLoading(true);
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'github',
-        options: {
-          redirectTo: window.location.origin
-        }
-      });
-      if (error) throw error;
-    } catch (err) {
-      setLoginError(err.message || 'GitHub 登录失败，请稍后再试');
-      if (isExplicitLoginRef) isExplicitLoginRef.current = false;
-      setLoginLoading(false);
-    }
   };
 
   // iOS 等系统仅在「用户手势」触发的 focus 上弹出软键盘；触摸验证码区域时同步 focus 可稳定唤起键盘
@@ -253,60 +228,6 @@ export default function LoginModal({ onClose, showToast, isExplicitLoginRef, ini
               </button>
             </div>
           </form>
-
-          {!loginSuccess && process.env.NEXT_PUBLIC_IS_GITHUB_LOGIN === 'true' && (
-            <>
-              <div
-                className="login-divider"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  margin: '20px 0',
-                  gap: 12
-                }}
-              >
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                <span className="muted" style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
-                  或使用
-                </span>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-              </div>
-
-              <button
-                type="button"
-                className="github-login-btn"
-                onClick={handleGithubLogin}
-                disabled={loginLoading}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 10,
-                  padding: '12px 16px',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  background: 'var(--bg)',
-                  color: 'var(--text)',
-                  cursor: loginLoading ? 'not-allowed' : 'pointer',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  opacity: loginLoading ? 0.6 : 1,
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <span className="github-icon-wrap">
-                  <Image
-                    unoptimized
-                    alt="项目Github地址"
-                    src={githubImg}
-                    style={{ width: '24px', height: '24px', cursor: 'pointer' }}
-                  />
-                </span>
-                <span>使用 GitHub 登录</span>
-              </button>
-            </>
-          )}
         </div>
       </div>
     </>
