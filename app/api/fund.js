@@ -26,6 +26,59 @@ dayjs.tz.setDefault(TZ);
 const nowInTz = () => dayjs().tz(TZ);
 const toTz = (input) => (input ? dayjs.tz(input, TZ) : nowInTz());
 
+let protectedMarketQueue = Promise.resolve();
+let lastProtectedMarketRequestAt = 0;
+const PROTECTED_MARKET_INTERVAL_MS = 1100;
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const getSupabaseAccessToken = async () => {
+  if (!isSupabaseConfigured || !supabase?.auth?.getSession) {
+    throw new Error('请先登录');
+  }
+  const { data, error } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  if (error || !token) throw new Error('请先登录');
+  return token;
+};
+
+const fetchProtectedMarketJson = (url, options = {}) => {
+  const run = protectedMarketQueue
+    .catch(() => {})
+    .then(async () => {
+      const elapsed = Date.now() - lastProtectedMarketRequestAt;
+      if (elapsed < PROTECTED_MARKET_INTERVAL_MS) {
+        await wait(PROTECTED_MARKET_INTERVAL_MS - elapsed);
+      }
+      const token = await getSupabaseAccessToken();
+      lastProtectedMarketRequestAt = Date.now();
+
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          Accept: 'application/json',
+          ...(options.headers || {}),
+          Authorization: `Bearer ${token}`
+        },
+        cache: 'no-store'
+      });
+      const payload = await response.json().catch(() => null);
+      if (response.status === 429) {
+        throw new Error(payload?.error || '请求过于频繁，请稍后再试');
+      }
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(payload?.error || '请先登录');
+      }
+      if (!response.ok) {
+        throw new Error(payload?.error || `行情接口请求失败 (${response.status})`);
+      }
+      return payload;
+    });
+
+  protectedMarketQueue = run.catch(() => {});
+  return run;
+};
+
 /**
  * 获取单位净值的缓存时长（单位：毫秒）
  * - 交易日交易时段（09:30-15:00）：30 分钟，减少高频刷新时的冗余请求
@@ -372,6 +425,17 @@ export const fetchEastmoneySectorQuotesBatch = async (secids, { cacheTime = SECT
   }
 
   return results;
+};
+
+export const fetchHotSectors = async ({ pageSize = 80 } = {}) => {
+  const params = new URLSearchParams({ pageSize: String(pageSize) });
+  const payload = await fetchProtectedMarketJson(`/api/hot-sectors?${params.toString()}`, {
+    method: 'GET'
+  });
+  if (!payload || payload.success !== true || !isArray(payload.data)) {
+    throw new Error(payload?.error || '加载热门板块失败');
+  }
+  return payload.data;
 };
 
 function normalizeEastmoneyScriptUrl(url) {
@@ -2359,40 +2423,15 @@ export const parseFundTextWithLLM = async (text) => {
  */
 export const fetchFundValuationRanking = async (sort = 3, order = 'desc', page = 1, pageSize = 20) => {
   const requestBody = { sort, order, page, pageSize };
+  const data = await fetchProtectedMarketJson('/api/fund-valuation-ranking', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody)
+  });
 
-  try {
-    const data = await withRetry(async () => {
-      const response = await fetch('/api/fund-valuation-ranking', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-        cache: 'no-store'
-      });
-
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(payload?.error || `加载估值排行失败 (${response.status})`);
-      }
-      return payload;
-    });
-
-    if (!data || data.success !== true) throw new Error(data?.error || '加载估值排行失败');
-    return { Data: data.data };
-  } catch (proxyError) {
-    if (!isSupabaseConfigured || !supabase?.functions?.invoke) throw proxyError;
-
-    const { data, error } = await withRetry(() =>
-      supabase.functions.invoke('fund-valuation-ranking', {
-        body: requestBody
-      })
-    );
-
-    if (error) throw new Error(error.message || proxyError?.message || '加载估值排行失败');
-    if (!data || data.success !== true) throw new Error(data?.error || proxyError?.message || '加载估值排行失败');
-
-    // 保持与原 JSONP 返回结构一致：{ Data: { list: [...], ... } }
-    return { Data: data.data };
-  }
+  if (!data || data.success !== true) throw new Error(data?.error || '加载估值排行失败');
+  // 保持与原 JSONP 返回结构一致：{ Data: { list: [...], ... } }
+  return { Data: data.data };
 };
 
 /**

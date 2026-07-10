@@ -17,10 +17,9 @@ import {
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useReactTable, getCoreRowModel, flexRender } from '@tanstack/react-table';
-import { fetchFundValuationRanking, fetchFundPeriodReturns } from '../api/fund';
+import { fetchFundValuationRanking, fetchFundPeriodReturns, fetchHotSectors } from '../api/fund';
 import { cn } from '@/lib/utils';
 import { useStorageStore, useUserStore, useModalStore } from '../stores';
-import { supabase } from '../lib/supabase';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Empty, EmptyTitle, EmptyDescription, EmptyContent, EmptyMedia } from '@/components/ui/empty';
 import { Button } from '@/components/ui/button';
@@ -103,22 +102,18 @@ export default function MarketTab({ onAddFund, getFundCardProps, isActive }) {
   const toggleFavorite = useStorageStore((s) => s.toggleFavorite);
   const funds = useStorageStore((s) => s.funds);
 
-  // Queries for Hot Sectors (Supabase)
-  const { data: sectorEstimates, isLoading: sectorsLoading } = useQuery({
+  const {
+    data: sectorEstimates,
+    isLoading: sectorsLoading,
+    isError: sectorsError,
+    error: sectorsErrorDetail
+  } = useQuery({
     queryKey: ['hotSectors'],
-    queryFn: async () => {
-      try {
-        if (!supabase) return [];
-        const { data, error } = await supabase.from('fund_topic').select('*');
-        if (error) throw error;
-        return data || [];
-      } catch (e) {
-        console.error('Fetch hot sectors error:', e);
-        return [];
-      }
-    },
+    queryFn: () => fetchHotSectors({ pageSize: 80 }),
     enabled: !!isActive,
-    staleTime: 120000
+    staleTime: 60000,
+    retry: 1,
+    refetchOnWindowFocus: false
   });
 
   const filteredAndSortedSectors = useMemo(() => {
@@ -336,7 +331,7 @@ export default function MarketTab({ onAddFund, getFundCardProps, isActive }) {
       ) : (
         <>
           {/* 热门板块 */}
-          {(sectorsLoading || (sectorEstimates && sectorEstimates.length > 0)) && (
+          {(sectorsLoading || sectorsError || sectorEstimates) && (
             <div className="market-section">
               <div className="market-section-header">
                 <div className="flex items-center gap-2 sm:gap-3">
@@ -441,68 +436,75 @@ export default function MarketTab({ onAddFund, getFundCardProps, isActive }) {
 
               <motion.div layout className="market-sector-grid">
                 <AnimatePresence mode="popLayout">
-                  {sectorsLoading
-                    ? Array.from({ length: isMobile ? 4 : 10 }).map((_, i) => (
+                  {sectorsLoading ? (
+                    Array.from({ length: isMobile ? 4 : 10 }).map((_, i) => (
+                      <motion.div
+                        key={`skeleton-sector-${i}`}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ type: 'spring', stiffness: 250, damping: 25, mass: 1 }}
+                        className="market-sector-card glass"
+                      >
+                        <div className="market-sector-main items-center mt-0.5">
+                          <Skeleton className="h-5 w-16" />
+                          <Skeleton className="h-4 w-12" />
+                        </div>
+                        <div className="market-sector-leader flex items-center mt-1 h-[18px]">
+                          <Skeleton className="h-3 w-20" />
+                        </div>
+                      </motion.div>
+                    ))
+                  ) : sectorsError ? (
+                    <div className="col-span-full py-8 text-center text-sm text-muted-foreground">
+                      热门板块暂不可用：{sectorsErrorDetail?.message || '请稍后重试'}
+                    </div>
+                  ) : filteredAndSortedSectors.length === 0 ? (
+                    <div className="col-span-full py-8 text-center text-sm text-muted-foreground">暂无板块数据</div>
+                  ) : (
+                    filteredAndSortedSectors.map((sector) => {
+                      const pctStr = sector.change_pct != null ? String(sector.change_pct) : '0.00';
+                      const pctNum = parseFloat(pctStr);
+                      const isUp = pctNum > 0;
+                      const isDown = pctNum < 0;
+
+                      return (
                         <motion.div
-                          key={`skeleton-sector-${i}`}
+                          layout
                           initial={{ opacity: 0, scale: 0.9 }}
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.9 }}
                           transition={{ type: 'spring', stiffness: 250, damping: 25, mass: 1 }}
+                          key={sector.id || sector.sector_id}
                           className="market-sector-card glass"
                         >
-                          <div className="market-sector-main items-center mt-0.5">
-                            <Skeleton className="h-5 w-16" />
-                            <Skeleton className="h-4 w-12" />
+                          <div className="market-sector-main">
+                            <span className="market-sector-name">{sector.sector_name}</span>
+                            {sectorSort === 'change_pct' ? (
+                              <span className={cn('market-sector-pct', getColorClass(pctStr))}>
+                                {formatPercent(pctStr)}
+                              </span>
+                            ) : (
+                              <span className={cn('market-sector-pct', getColorClass(sector.net_inflow))}>
+                                {sector.net_inflow ? (sector.net_inflow / 100000000).toFixed(2) + '亿' : '--'}
+                              </span>
+                            )}
                           </div>
-                          <div className="market-sector-leader flex items-center mt-1 h-[18px]">
-                            <Skeleton className="h-3 w-20" />
+                          <div className="market-sector-leader">
+                            {sectorSort === 'change_pct' ? (
+                              <>
+                                资金流入: {sector.net_inflow ? (sector.net_inflow / 100000000).toFixed(2) + '亿' : '--'}
+                              </>
+                            ) : (
+                              <>
+                                涨跌幅: <span className={getColorClass(pctStr)}>{formatPercent(pctStr)}</span>
+                              </>
+                            )}
                           </div>
                         </motion.div>
-                      ))
-                    : filteredAndSortedSectors?.map((sector) => {
-                        const pctStr = sector.change_pct != null ? String(sector.change_pct) : '0.00';
-                        const pctNum = parseFloat(pctStr);
-                        const isUp = pctNum > 0;
-                        const isDown = pctNum < 0;
-
-                        return (
-                          <motion.div
-                            layout
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.9 }}
-                            transition={{ type: 'spring', stiffness: 250, damping: 25, mass: 1 }}
-                            key={sector.id || sector.sector_id}
-                            className="market-sector-card glass"
-                          >
-                            <div className="market-sector-main">
-                              <span className="market-sector-name">{sector.sector_name}</span>
-                              {sectorSort === 'change_pct' ? (
-                                <span className={cn('market-sector-pct', getColorClass(pctStr))}>
-                                  {formatPercent(pctStr)}
-                                </span>
-                              ) : (
-                                <span className={cn('market-sector-pct', getColorClass(sector.net_inflow))}>
-                                  {sector.net_inflow ? (sector.net_inflow / 100000000).toFixed(2) + '亿' : '--'}
-                                </span>
-                              )}
-                            </div>
-                            <div className="market-sector-leader">
-                              {sectorSort === 'change_pct' ? (
-                                <>
-                                  资金流入:{' '}
-                                  {sector.net_inflow ? (sector.net_inflow / 100000000).toFixed(2) + '亿' : '--'}
-                                </>
-                              ) : (
-                                <>
-                                  涨跌幅: <span className={getColorClass(pctStr)}>{formatPercent(pctStr)}</span>
-                                </>
-                              )}
-                            </div>
-                          </motion.div>
-                        );
-                      })}
+                      );
+                    })
+                  )}
                 </AnimatePresence>
               </motion.div>
             </div>

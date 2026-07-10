@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { fetchHotSectors } from '../api/fund';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -41,20 +41,17 @@ export default function AllSectorsModal({ onClose }) {
     }
   };
 
-  const { data: sectorEstimates } = useQuery({
+  const {
+    data: sectorEstimates,
+    isLoading: sectorsLoading,
+    isError: sectorsError,
+    error: sectorsErrorDetail
+  } = useQuery({
     queryKey: ['hotSectors'],
-    queryFn: async () => {
-      try {
-        if (!supabase) return [];
-        const { data, error } = await supabase.from('fund_topic').select('*');
-        if (error) throw error;
-        return data || [];
-      } catch (e) {
-        console.error('Fetch hot sectors error:', e);
-        return [];
-      }
-    },
-    staleTime: 120000
+    queryFn: () => fetchHotSectors({ pageSize: 100 }),
+    staleTime: 60000,
+    retry: 1,
+    refetchOnWindowFocus: false
   });
 
   const filteredAndSortedSectors = useMemo(() => {
@@ -166,7 +163,13 @@ export default function AllSectorsModal({ onClose }) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-4 pt-0" ref={scrollRef}>
-        {filteredAndSortedSectors.length === 0 ? (
+        {sectorsLoading ? (
+          <div className="py-8 text-center text-muted-foreground">加载中...</div>
+        ) : sectorsError ? (
+          <div className="py-8 px-4 text-center text-muted-foreground">
+            热门板块暂不可用：{sectorsErrorDetail?.message || '请稍后重试'}
+          </div>
+        ) : filteredAndSortedSectors.length === 0 ? (
           <div className="py-8 text-center text-muted-foreground">暂无数据</div>
         ) : (
           <div

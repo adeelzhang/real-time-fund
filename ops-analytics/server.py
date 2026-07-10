@@ -3,13 +3,14 @@ import json
 import hmac
 import os
 import sqlite3
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib import error as urllib_error
 from urllib import request as urllib_request
-from urllib.parse import urlencode, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 from zoneinfo import ZoneInfo
 
 
@@ -17,8 +18,17 @@ DB_PATH = os.environ.get("DB_PATH", "/data/analytics.sqlite3")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 ANALYTICS_SALT = os.environ.get("ANALYTICS_SALT", "guji")
 STATS_TZ = os.environ.get("STATS_TZ", "Asia/Shanghai")
+SUPABASE_URL = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY", "")
 MAX_BODY = 16 * 1024
 MARKET_MAX_BODY = 1024
+AUTH_CACHE_TTL = 45
+MARKET_RATE_LIMIT_SECONDS = 1.0
+
+AUTH_CACHE = {}
+AUTH_CACHE_LOCK = threading.Lock()
+RATE_LIMITS = {}
+RATE_LIMIT_LOCK = threading.Lock()
 
 
 def now_ts():
@@ -95,13 +105,15 @@ def ip_hash(raw_ip):
     return hashlib.sha256(f"{ANALYTICS_SALT}:{ip}".encode("utf-8")).hexdigest()
 
 
-def json_response(handler, data, status=HTTPStatus.OK):
+def json_response(handler, data, status=HTTPStatus.OK, extra_headers=None):
     body = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Cache-Control", "no-store")
     handler.send_header("Access-Control-Allow-Origin", "*")
     handler.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password, Authorization, apikey")
+    for key, value in (extra_headers or {}).items():
+        handler.send_header(key, str(value))
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
     handler.wfile.write(body)
@@ -131,6 +143,79 @@ def is_authorized(handler):
         return False
     supplied_password = handler.headers.get("X-Admin-Password", "")
     return hmac.compare_digest(supplied_password, ADMIN_PASSWORD)
+
+
+def get_bearer_token(handler):
+    auth = handler.headers.get("Authorization", "")
+    if not auth.lower().startswith("bearer "):
+        return ""
+    return auth.split(" ", 1)[1].strip()
+
+
+def get_authenticated_user_id(handler):
+    token = get_bearer_token(handler)
+    if not token:
+        return None, HTTPStatus.UNAUTHORIZED, "请先登录"
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        return None, HTTPStatus.SERVICE_UNAVAILABLE, "登录校验服务未配置"
+
+    now = time.monotonic()
+    with AUTH_CACHE_LOCK:
+        cached = AUTH_CACHE.get(token)
+        if cached and cached["expires_at"] > now:
+            return cached["user_id"], None, None
+
+    auth_url = f"{SUPABASE_URL.rstrip('/')}/auth/v1/user"
+    req = urllib_request.Request(
+        auth_url,
+        headers={
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+        },
+    )
+
+    try:
+        with urllib_request.urlopen(req, timeout=8) as response:
+            raw = response.read(256 * 1024)
+        payload = json.loads(raw.decode("utf-8"))
+    except urllib_error.HTTPError as err:
+        if err.code in {401, 403}:
+            return None, HTTPStatus.UNAUTHORIZED, "登录状态已失效"
+        return None, HTTPStatus.BAD_GATEWAY, f"登录校验失败 ({err.code})"
+    except Exception as err:
+        return None, HTTPStatus.BAD_GATEWAY, f"登录校验失败: {sanitize(err, 120)}"
+
+    user_id = sanitize(payload.get("id") if isinstance(payload, dict) else "", 128)
+    if not user_id:
+        return None, HTTPStatus.UNAUTHORIZED, "登录状态已失效"
+
+    with AUTH_CACHE_LOCK:
+        AUTH_CACHE[token] = {"user_id": user_id, "expires_at": now + AUTH_CACHE_TTL}
+    return user_id, None, None
+
+
+def authorize_market_request(handler):
+    user_id, status, error = get_authenticated_user_id(handler)
+    if error:
+        json_response(handler, {"success": False, "error": error}, status)
+        return None
+
+    now = time.monotonic()
+    with RATE_LIMIT_LOCK:
+        last_seen = RATE_LIMITS.get(user_id, 0)
+        wait_seconds = MARKET_RATE_LIMIT_SECONDS - (now - last_seen)
+        if wait_seconds > 0:
+            retry_after = max(1, int(wait_seconds + 0.999))
+            json_response(
+                handler,
+                {"success": False, "error": "请求过于频繁，请稍后再试"},
+                HTTPStatus.TOO_MANY_REQUESTS,
+                {"Retry-After": retry_after},
+            )
+            return None
+        RATE_LIMITS[user_id] = now
+    return user_id
 
 
 def local_midnight(dt):
@@ -445,6 +530,113 @@ def fetch_fund_valuation_ranking(handler):
     json_response(handler, {"success": True, "data": data})
 
 
+def fetch_upstream_json(api_url, referer):
+    req = urllib_request.Request(
+        api_url,
+        headers={
+            "Accept": "application/json,text/plain,*/*",
+            "Referer": referer,
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+        },
+    )
+    with urllib_request.urlopen(req, timeout=12) as response:
+        raw = response.read(2 * 1024 * 1024)
+    return json.loads(raw.decode("utf-8-sig"))
+
+
+def normalize_sector_quote(item, sector_type):
+    if not isinstance(item, dict):
+        return None
+    sector_id = sanitize(item.get("f12"), 64)
+    sector_name = sanitize(item.get("f14"), 128)
+    if not sector_id or not sector_name:
+        return None
+
+    change_pct = item.get("f3")
+    try:
+        change_pct = float(change_pct)
+    except Exception:
+        change_pct = None
+
+    net_inflow = item.get("f62")
+    try:
+        net_inflow = int(float(net_inflow))
+    except Exception:
+        net_inflow = None
+
+    return {
+        "id": f"{sector_type}:{sector_id}",
+        "sector_type": sector_type,
+        "sector_id": sector_id,
+        "sector_name": sector_name,
+        "update_frequency": "realtime",
+        "net_inflow": net_inflow,
+        "change_pct": change_pct,
+        "update_at": datetime.now(get_tz()).isoformat(),
+    }
+
+
+def fetch_hot_sectors(handler, parsed):
+    params = parse_qs(parsed.query)
+    requested_type = sanitize(params.get("type", ["all"])[0], 16)
+    page_size = bounded_int(params.get("pageSize", [80])[0], 80, 1, 100)
+
+    sector_sources = {
+        "industry": {
+            "host": "push2.eastmoney.com",
+            "fs": "m:90+t:2",
+        },
+        "concept": {
+            "host": "push2delay.eastmoney.com",
+            "fs": "m:90+t:3",
+        },
+    }
+    sector_types = list(sector_sources) if requested_type not in sector_sources else [requested_type]
+    data = []
+    errors = []
+
+    for sector_type in sector_types:
+        source = sector_sources[sector_type]
+        query = urlencode(
+            {
+                "pn": 1,
+                "pz": page_size,
+                "po": 1,
+                "np": 1,
+                "fltt": 2,
+                "invt": 2,
+                "fid": "f3",
+                "fs": source["fs"],
+                "fields": "f12,f14,f3,f62",
+            }
+        )
+        api_url = f"https://{source['host']}/api/qt/clist/get?{query}"
+        try:
+            upstream_data = fetch_upstream_json(api_url, "https://quote.eastmoney.com/center/boardlist.html")
+            diff = upstream_data.get("data", {}).get("diff") if isinstance(upstream_data, dict) else None
+            if not isinstance(diff, list):
+                raise ValueError("东方财富接口返回格式异常")
+            data.extend(filter(None, (normalize_sector_quote(item, sector_type) for item in diff)))
+        except urllib_error.HTTPError as err:
+            errors.append(f"{sector_type}:{err.code}")
+        except Exception as err:
+            errors.append(f"{sector_type}:{sanitize(err, 120)}")
+
+    if not data:
+        json_response(
+            handler,
+            {"success": False, "error": "热门板块接口请求失败", "details": errors},
+            HTTPStatus.BAD_GATEWAY,
+        )
+        return
+
+    json_response(handler, {"success": True, "data": data, "warnings": errors})
+
+
 OPS_HTML = r"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -670,6 +862,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             json_response(self, build_stats())
             return
+        if parsed.path == "/api/hot-sectors":
+            if not authorize_market_request(self):
+                return
+            fetch_hot_sectors(self, parsed)
+            return
         json_response(self, {"ok": False, "error": "not found"}, HTTPStatus.NOT_FOUND)
 
     def do_HEAD(self):
@@ -685,6 +882,8 @@ class Handler(BaseHTTPRequestHandler):
             record_event(self)
             return
         if parsed.path == "/api/fund-valuation-ranking":
+            if not authorize_market_request(self):
+                return
             fetch_fund_valuation_ranking(self)
             return
         json_response(self, {"ok": False, "error": "not found"}, HTTPStatus.NOT_FOUND)
