@@ -38,6 +38,29 @@ export const normalizeFundDailyEarningsScoped = (source) => {
   return source;
 };
 
+const LOCAL_UPDATED_AT_KEY = 'localUpdatedAt';
+
+const parseTimestampMs = (value) => {
+  if (!value) return 0;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+};
+
+const latestTimestampIso = (...values) => {
+  const latestMs = values.reduce((max, value) => Math.max(max, parseTimestampMs(value)), 0);
+  return latestMs > 0 ? new Date(latestMs).toISOString() : null;
+};
+
+const hasCloudPayload = (value) => {
+  if (!isPlainObject(value)) return false;
+  return Object.entries(value).some(([key, item]) => {
+    if (key === '_syncMeta' || item == null) return false;
+    if (isArray(item)) return item.length > 0;
+    if (isPlainObject(item)) return Object.keys(item).length > 0;
+    return true;
+  });
+};
+
 const mergeValuationFieldsByGztime = (localFund, cloudFund) => {
   if (!isPlainObject(cloudFund)) return cloudFund;
   if (!isPlainObject(localFund)) return cloudFund;
@@ -100,7 +123,7 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
 
   // lastSyncTime init
   useEffect(() => {
-    const stored = storageStore.getItem('localUpdatedAt');
+    const stored = storageStore.getItem(LOCAL_UPDATED_AT_KEY);
     if (stored) {
       setLastSyncTime(stored);
     } else {
@@ -124,6 +147,12 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
     );
     deviceConflictModalOpenRef.current = useModalStore.getState().deviceConflictModal.open;
     return unsub;
+  }, []);
+
+  const markLocalUpdated = useCallback((timestamp = nowInTz().toISOString()) => {
+    storageStore.setItem(LOCAL_UPDATED_AT_KEY, timestamp);
+    setLastSyncTime(timestamp);
+    return timestamp;
   }, []);
 
   // --- getComparablePayload ---
@@ -359,6 +388,25 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
           });
       });
 
+    const fundDividendsSource = isPlainObject(payload.fundDividends) ? payload.fundDividends : {};
+    const fundDividendsSig = Object.entries(fundDividendsSource)
+      .map(([rawCode, entry]) => ({ code: normalizeCode(rawCode), entry }))
+      .filter(({ code }) => uniqueFundCodes.includes(code))
+      .sort((a, b) => a.code.localeCompare(b.code))
+      .map(({ code, entry }) => {
+        const list = isArray(entry.list) ? entry.list : [];
+        const last = list.length ? list[list.length - 1] : null;
+        return [
+          code,
+          String(entry.lastFetchDate || ''),
+          list.length,
+          String(last?.date || ''),
+          String(last?.dividend ?? ''),
+          String(last?.nav ?? '')
+        ].join('|');
+      })
+      .join('\n');
+
     const tagRows = isArray(payload.tags) ? payload.tags : [];
     const tagsSig = tagRows
       .map((r) => {
@@ -380,6 +428,7 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
       collapsedCodes,
       collapsedTrends,
       collapsedValuationTrends,
+      collapsedEarnings,
       refreshMs: Number.isFinite(payload.refreshMs) ? payload.refreshMs : 30000,
       holdings,
       groupHoldings: groupHoldingsNorm,
@@ -387,7 +436,8 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
       transactions,
       dcaPlans,
       customSettings,
-      fundDailyEarningsSig
+      fundDailyEarningsSig,
+      fundDividendsSig
     });
   }
 
@@ -442,6 +492,9 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
       }
       if (!keys || keys.has('fundDailyEarnings')) {
         all.fundDailyEarnings = storageStore.getItem('fundDailyEarnings', {});
+      }
+      if (!keys || keys.has('fundDividends')) {
+        all.fundDividends = storageStore.getItem('fundDividends', {});
       }
       if (!keys || keys.has('tags')) {
         all.tags = storageStore.getItem('tags', []);
@@ -593,6 +646,14 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
               .filter(Boolean)
           : [];
 
+        const cleanedFundDividends = isPlainObject(all.fundDividends)
+          ? Object.entries(all.fundDividends).reduce((acc, [code, entry]) => {
+              if (!fundCodes.has(code) || !isPlainObject(entry)) return acc;
+              acc[code] = entry;
+              return acc;
+            }, {})
+          : {};
+
         // 合并所有 scope 的收益数据和 holdings 来计算 YTD 收益率
         const mergedEarningsForYtd = mergeAllScopedDailyEarnings(cleanedFundDailyEarnings);
         const mergedHoldingsForYtd = mergeAllHoldings(cleanedHoldings, cleanedGroupHoldings);
@@ -615,6 +676,7 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
           dcaPlans: cleanedDcaPlans,
           customSettings: isPlainObject(all.customSettings) ? all.customSettings : {},
           fundDailyEarnings: cleanedFundDailyEarnings,
+          fundDividends: cleanedFundDividends,
           fundValuationTimeseries: isPlainObject(all.fundValuationTimeseries) ? all.fundValuationTimeseries : {},
           ytdReturnRate
         };
@@ -654,6 +716,8 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
         transactions: {},
         dcaPlans: { [DCA_SCOPE_GLOBAL]: {} },
         customSettings: {},
+        fundDailyEarnings: {},
+        fundDividends: {},
         exportedAt: nowInTz().toISOString()
       };
     }
@@ -679,12 +743,12 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
       if (!doSync) return;
 
       if (dirtyKeys.size > 0) {
-        doSync(userIdRef.current, false, payload, true);
+        doSync(userIdRef.current, false, payload, true, { forceTakeover: true });
       } else {
         const next = getComparablePayload(payload);
         if (next === lastSyncedRef.current) return;
         lastSyncedRef.current = next;
-        doSync(userIdRef.current, false, payload, false);
+        doSync(userIdRef.current, false, payload, false, { forceTakeover: true });
       }
     }, 1000 * 2);
   }, []);
@@ -692,7 +756,7 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
   // --- syncUserConfig (defined after scheduleSync but referenced by it) ---
   const syncUserConfig = useCallback(
     async (userId, showTip = true, payload = null, isPartial = false, options = {}) => {
-      const forceTakeover = options?.forceTakeover || false;
+      const forceTakeover = options?.forceTakeover !== false;
       if (!userId) {
         showToast(`userId 不存在，请重新登录`, 'error');
         return;
@@ -754,9 +818,19 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
             }
             console.error('增量同步失败，尝试全量同步', rpcError);
             const fullPayload = collectLocalPayload();
+            const fullDataToSync = isPlainObject(fullPayload)
+              ? {
+                  ...fullPayload,
+                  _syncMeta: {
+                    ...(isPlainObject(fullPayload._syncMeta) ? fullPayload._syncMeta : {}),
+                    deviceId,
+                    at: now
+                  }
+                }
+              : { _syncMeta: { deviceId, at: now } };
             const { error: fullError } = await withRetry(() =>
               supabase.rpc('update_user_config_full', {
-                payload: fullPayload,
+                payload: fullDataToSync,
                 p_last_device_id: deviceId,
                 p_force_takeover: forceTakeover
               })
@@ -808,12 +882,8 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
           }
         }
 
-        storageStore.setItem('localUpdatedAt', now);
-        setLastSyncTime(now);
-
-        if (forceTakeover) {
-          lastSyncedRef.current = getComparablePayload(dataToSync);
-        }
+        markLocalUpdated(now);
+        lastSyncedRef.current = getComparablePayload(collectLocalPayload());
 
         if (showTip) {
           useModalStore.setState({ successModal: { open: true, message: '已同步云端配置' } });
@@ -825,7 +895,7 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
         skipSyncRef.current = false;
       }
     },
-    [showToast]
+    [markLocalUpdated, showToast]
   );
 
   // 保持 syncUserConfigRef 与最新 syncUserConfig 同步
@@ -851,15 +921,13 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
       }
 
       if (!skipSyncRef.current) {
-        const now = nowInTz().toISOString();
-        storageStore.setItem('localUpdatedAt', now);
-        setLastSyncTime(now);
+        markLocalUpdated();
       }
       scheduleSync();
     };
 
     setOnSync(triggerSync);
-  }, [setOnSync, scheduleSync]);
+  }, [markLocalUpdated, setOnSync, scheduleSync]);
 
   // --- cross-tab storage listener ---
   useEffect(() => {
@@ -876,9 +944,11 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
       'holdings',
       'groupHoldings',
       'pendingTrades',
+      'transactions',
       'dcaPlans',
       'customSettings',
-      'fundDailyEarnings'
+      'fundDailyEarnings',
+      'fundDividends'
     ]);
     const onStorage = (e) => {
       if (!e.key) return;
@@ -898,6 +968,7 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
           const nextSig = getTagsStoreSignature(e.newValue);
           if (prevSig === nextSig) return;
         }
+        dirtyKeysRef.current.add(e.key);
         scheduleSync();
       });
     };
@@ -913,13 +984,11 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
     queueMicrotask(() => {
       dirtyKeysRef.current.add('customSettings');
       if (!skipSyncRef.current) {
-        const now = nowInTz().toISOString();
-        storageStore.setItem('localUpdatedAt', now);
-        setLastSyncTime(now);
+        markLocalUpdated();
       }
       scheduleSync();
     });
-  }, [scheduleSync]);
+  }, [markLocalUpdated, scheduleSync]);
 
   // --- applyCloudConfig ---
   const applyCloudConfig = useCallback(
@@ -928,7 +997,7 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
       skipSyncRef.current = true;
       try {
         if (cloudUpdatedAt) {
-          storageStore.setItem('localUpdatedAt', cloudUpdatedAt);
+          markLocalUpdated(cloudUpdatedAt);
         }
         let localFundsForMerge = [];
         try {
@@ -1119,6 +1188,17 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
         }, {});
         useStorageStore.getState().setFundDailyEarnings(nextFundDailyEarnings);
 
+        if (hasOwn(cloudData, 'fundDividends')) {
+          const nextFundDividends = isPlainObject(cloudData.fundDividends)
+            ? Object.entries(cloudData.fundDividends).reduce((acc, [code, entry]) => {
+                if (!nextFundCodes.has(code) || !isPlainObject(entry)) return acc;
+                acc[code] = entry;
+                return acc;
+              }, {})
+            : {};
+          useStorageStore.getState().setFundDividends(nextFundDividends);
+        }
+
         if (hasOwn(cloudData, 'fundValuationTimeseries')) {
           const nextTimeseries = isPlainObject(cloudData.fundValuationTimeseries)
             ? cloudData.fundValuationTimeseries
@@ -1243,46 +1323,73 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
         skipSyncRef.current = false;
       }
     },
-    [showToast, setTempSeconds, setFundTagRecords, syncUserConfig]
+    [markLocalUpdated, refreshAllRef, setTempSeconds, setFundTagRecords, syncUserConfig]
   );
 
   // --- fetchCloudConfig ---
   const fetchCloudConfig = useCallback(
-    async (userId, checkConflict = false, options = {}) => {
+    async (userId, _checkConflict = false, options = {}) => {
       if (!userId) return;
       try {
+        useModalStore.setState({ cloudConfigModal: { open: false, userId: null, type: null, cloudData: null } });
         const { data: meta, error: metaError } = await withRetry(() =>
           supabase.from('user_configs').select('id, data, updated_at').eq('user_id', userId).maybeSingle()
         );
 
         if (metaError) throw metaError;
 
+        const pushLocalToCloud = async () => {
+          await syncUserConfig(userId, false, null, false, { forceTakeover: true });
+        };
+
         if (!meta?.id) {
           const { error: insertError } = await withRetry(() =>
             supabase.from('user_configs').insert({ user_id: userId })
           );
           if (insertError) throw insertError;
-          useModalStore.setState({ cloudConfigModal: { open: true, userId, type: 'empty' } });
+          await pushLocalToCloud();
           return;
         }
 
-        if (checkConflict) {
-          useModalStore.setState({ cloudConfigModal: { open: true, userId, type: 'conflict', cloudData: meta.data } });
+        const cloudData = isPlainObject(meta.data) ? meta.data : {};
+        const cloudUpdatedAt = latestTimestampIso(meta.updated_at, cloudData?._syncMeta?.at) || meta.updated_at;
+
+        if (!hasCloudPayload(cloudData)) {
+          await pushLocalToCloud();
           return;
         }
 
-        if (meta.data && isPlainObject(meta.data) && Object.keys(meta.data).length > 0) {
-          await applyCloudConfig(meta.data, meta.updated_at, { ...options, userId });
+        const localUpdatedAt = storageStore.getItem(LOCAL_UPDATED_AT_KEY);
+        const localMs = parseTimestampMs(localUpdatedAt);
+        const cloudMs = parseTimestampMs(cloudUpdatedAt);
+
+        if (localMs > cloudMs) {
+          await pushLocalToCloud();
           return;
         }
 
-        useModalStore.setState({ cloudConfigModal: { open: true, userId, type: 'empty' } });
+        if (cloudMs > localMs || !localMs) {
+          await applyCloudConfig(cloudData, cloudUpdatedAt, { ...options, userId });
+          return;
+        }
+
+        const localComparable = getComparablePayload(collectLocalPayload());
+        const cloudComparable = getComparablePayload(cloudData);
+        if (localComparable !== cloudComparable) {
+          await pushLocalToCloud();
+          return;
+        }
+
+        lastSyncedRef.current = cloudComparable;
+        if (cloudUpdatedAt) {
+          markLocalUpdated(cloudUpdatedAt);
+        }
       } catch (e) {
         console.error('获取云端配置失败', e);
         skipSyncRef.current = false;
       }
     },
-    [applyCloudConfig]
+    [applyCloudConfig, markLocalUpdated, syncUserConfig]
   );
 
   // --- handleSyncLocalConfig ---

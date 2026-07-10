@@ -2820,9 +2820,9 @@ export default function HomePage() {
         setLoginModalOpen(false);
         setLoginInitialError('');
       }
-      // 仅在明确的登录动作（SIGNED_IN）时检查冲突；INITIAL_SESSION（刷新页面等）不检查，直接以云端为准
+      // 登录后自动比较本地与云端时间戳，静默使用较新的一份。
       fetchCloudConfig(session.user.id, isExplicitLogin, {
-        refreshAfterApply: event === 'INITIAL_SESSION'
+        refreshAfterApply: event === 'INITIAL_SESSION' || event === 'SIGNED_IN'
       });
     };
 

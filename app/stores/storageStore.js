@@ -3,16 +3,25 @@ import { isArray, isBoolean, isEqual, isFunction, isObject, isString } from 'lod
 import { getFundCodesFromTagRecord } from '@/app/lib/fundHelpers';
 import { DEFAULT_SORT_RULES, SORT_DISPLAY_MODES } from '@/app/constants';
 
+const FUND_USER_SYNC_FIELDS = [
+  'dataSource',
+  'autoSource',
+  'showImageChart',
+  'confirmDays',
+  'addedAt',
+  'addBaseNav',
+  'addBaseDate'
+];
+
 /**
- * 签名函数：用于检测 funds 列表是否发生实质性变更（jzrq, dwjz 等核心字段）
+ * 签名函数：用于检测 funds 列表是否发生用户数据变更。
+ * 行情刷新字段不参与默认签名，避免自动刷新误触发云端覆盖。
  */
 export const getFundCodesSignature = (value, extraFields = []) => {
   try {
     const list = isArray(value) ? value : JSON.parse(value || '[]');
     if (!isArray(list)) return '';
-    const fields = Array.from(
-      new Set(['jzrq', 'dwjz', 'dataSource', 'showImageChart', ...(isArray(extraFields) ? extraFields : [])])
-    );
+    const fields = Array.from(new Set([...FUND_USER_SYNC_FIELDS, ...(isArray(extraFields) ? extraFields : [])]));
     const items = list
       .map((item) => {
         if (!item?.code) return null;
@@ -558,7 +567,7 @@ export const useStorageStore = create((set, get) => ({
     if (onSync && SYNC_KEYS.has(key)) {
       // 特殊逻辑：如果是 funds 或 tags，通过签名判断是否真的需要同步
       // 注意：isEqual 已经过滤了完全一致的情况，这里依然保留签名判断
-      // 是为了过滤“实质性”无变化的更新（如 jzrq, dwjz 没变，但其他非核心字段变了）
+      // 是为了过滤行情刷新类更新，只同步客户配置相关字段。
       if (key === 'funds') {
         if (getFundCodesSignature(prevValue) === getFundCodesSignature(normalizedValue)) {
           return;
