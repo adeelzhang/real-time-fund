@@ -1,17 +1,18 @@
 import hashlib
 import json
+import hmac
 import os
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 
 DB_PATH = os.environ.get("DB_PATH", "/data/analytics.sqlite3")
-ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 ANALYTICS_SALT = os.environ.get("ANALYTICS_SALT", "guji")
 STATS_TZ = os.environ.get("STATS_TZ", "Asia/Shanghai")
 MAX_BODY = 16 * 1024
@@ -97,7 +98,7 @@ def json_response(handler, data, status=HTTPStatus.OK):
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Cache-Control", "no-store")
     handler.send_header("Access-Control-Allow-Origin", "*")
-    handler.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+    handler.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
     handler.wfile.write(body)
@@ -123,12 +124,10 @@ def head_response(handler, status=HTTPStatus.OK, content_type="text/html; charse
 
 
 def is_authorized(handler):
-    if not ADMIN_TOKEN:
-      return False
-    parsed = urlparse(handler.path)
-    query_token = parse_qs(parsed.query).get("token", [""])[0]
-    header_token = handler.headers.get("X-Admin-Token", "")
-    return query_token == ADMIN_TOKEN or header_token == ADMIN_TOKEN
+    if not ADMIN_PASSWORD:
+        return False
+    supplied_password = handler.headers.get("X-Admin-Password", "")
+    return hmac.compare_digest(supplied_password, ADMIN_PASSWORD)
 
 
 def local_midnight(dt):
@@ -472,7 +471,7 @@ OPS_HTML = r"""<!doctype html>
       <div class="status" id="status">等待加载</div>
     </div>
     <div class="toolbar">
-      <input id="token" type="password" autocomplete="current-password" placeholder="管理 Token">
+      <input id="password" type="password" autocomplete="current-password" placeholder="管理员密码">
       <button id="save">连接</button>
       <button class="secondary" id="refresh">刷新</button>
     </div>
@@ -512,8 +511,7 @@ OPS_HTML = r"""<!doctype html>
   <script>
     const $ = (id) => document.getElementById(id);
     const fmt = (n) => Number(n || 0).toLocaleString('zh-CN');
-    const tokenInput = $('token');
-    tokenInput.value = localStorage.getItem('guji_ops_token') || '';
+    const passwordInput = $('password');
     let timer = null;
 
     function setStatus(text) { $('status').textContent = text; }
@@ -532,13 +530,12 @@ OPS_HTML = r"""<!doctype html>
       }).join('');
     }
     async function load() {
-      const token = tokenInput.value.trim();
-      if (!token) { setStatus('请输入管理 Token'); return; }
-      localStorage.setItem('guji_ops_token', token);
+      const password = passwordInput.value;
+      if (!password) { setStatus('请输入管理员密码'); return; }
       setStatus('加载中...');
-      const res = await fetch('/api/analytics/stats', { headers: { 'X-Admin-Token': token } });
+      const res = await fetch('/api/analytics/stats', { headers: { 'X-Admin-Password': password } });
       if (!res.ok) {
-        setStatus(res.status === 401 ? 'Token 无效' : `加载失败 ${res.status}`);
+        setStatus(res.status === 401 ? '管理员密码无效' : `加载失败 ${res.status}`);
         return;
       }
       const data = await res.json();
@@ -561,8 +558,7 @@ OPS_HTML = r"""<!doctype html>
     }
     $('save').addEventListener('click', load);
     $('refresh').addEventListener('click', load);
-    tokenInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
-    if (tokenInput.value) load();
+    passwordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
   </script>
 </body>
 </html>"""
@@ -578,7 +574,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password")
         self.end_headers()
 
     def do_GET(self):
@@ -586,7 +582,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/health":
             json_response(self, {"ok": True, "service": "guji-analytics"})
             return
-        if parsed.path in {"/ops", "/ops/"}:
+        if parsed.path in {"/", "/ops", "/ops/"}:
             text_response(self, OPS_HTML)
             return
         if parsed.path == "/api/analytics/stats":
@@ -599,7 +595,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_HEAD(self):
         parsed = urlparse(self.path)
-        if parsed.path in {"/ops", "/ops/", "/health", "/api/analytics/stats"}:
+        if parsed.path in {"/", "/ops", "/ops/", "/health", "/api/analytics/stats"}:
             head_response(self)
             return
         head_response(self, HTTPStatus.NOT_FOUND, "application/json; charset=utf-8")
