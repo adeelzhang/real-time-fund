@@ -20,13 +20,17 @@ ANALYTICS_SALT = os.environ.get("ANALYTICS_SALT", "guji")
 STATS_TZ = os.environ.get("STATS_TZ", "Asia/Shanghai")
 SUPABASE_URL = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY", "")
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 MAX_BODY = 16 * 1024
 MARKET_MAX_BODY = 1024
 AUTH_CACHE_TTL = 45
+REGISTERED_USERS_CACHE_TTL = 300
 MARKET_RATE_LIMIT_SECONDS = 1.0
 
 AUTH_CACHE = {}
 AUTH_CACHE_LOCK = threading.Lock()
+REGISTERED_USERS_CACHE = {"expires_at": 0.0, "data": None}
+REGISTERED_USERS_CACHE_LOCK = threading.Lock()
 RATE_LIMITS = {}
 RATE_LIMIT_LOCK = threading.Lock()
 
@@ -193,6 +197,120 @@ def get_authenticated_user_id(handler):
     with AUTH_CACHE_LOCK:
         AUTH_CACHE[token] = {"user_id": user_id, "expires_at": now + AUTH_CACHE_TTL}
     return user_id, None, None
+
+
+def parse_total_count(headers):
+    for key in ("X-Total-Count", "x-total-count"):
+        value = headers.get(key)
+        if value is None:
+            continue
+        try:
+            return max(0, int(value))
+        except Exception:
+            pass
+
+    content_range = headers.get("Content-Range") or headers.get("content-range") or ""
+    if "/" not in content_range:
+        return None
+    total_part = content_range.rsplit("/", 1)[-1].strip()
+    if not total_part or total_part == "*":
+        return None
+    try:
+        return max(0, int(total_part))
+    except Exception:
+        return None
+
+
+def fetch_registered_users_page(page, per_page):
+    api_url = f"{SUPABASE_URL.rstrip('/')}/auth/v1/admin/users?{urlencode({'page': page, 'per_page': per_page})}"
+    req = urllib_request.Request(
+        api_url,
+        headers={
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            "Accept": "application/json",
+        },
+    )
+    with urllib_request.urlopen(req, timeout=10) as response:
+        raw = response.read(4 * 1024 * 1024)
+        total = parse_total_count(response.headers)
+    payload = json.loads(raw.decode("utf-8")) if raw else {}
+    if isinstance(payload, dict):
+        users = payload.get("users") if isinstance(payload.get("users"), list) else []
+    elif isinstance(payload, list):
+        users = payload
+    else:
+        users = []
+    return users, total
+
+
+def fetch_registered_users_summary():
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return {
+            "configured": False,
+            "count": None,
+            "source": "supabase_auth_admin",
+            "error": "未配置 SUPABASE_SERVICE_ROLE_KEY",
+        }
+
+    now = time.monotonic()
+    with REGISTERED_USERS_CACHE_LOCK:
+        cached = REGISTERED_USERS_CACHE.get("data")
+        if cached and REGISTERED_USERS_CACHE.get("expires_at", 0) > now:
+            return cached
+
+    try:
+        per_page = 1000
+        page = 1
+        total_count = None
+        scanned = 0
+        email_count = 0
+
+        while page <= 100:
+            users, page_total = fetch_registered_users_page(page, per_page)
+            if total_count is None and page_total is not None:
+                total_count = page_total
+            scanned += len(users)
+            email_count += sum(1 for user in users if isinstance(user, dict) and user.get("email"))
+
+            if not users or len(users) < per_page:
+                break
+            if total_count is not None and scanned >= total_count:
+                break
+            page += 1
+
+        summary = {
+            "configured": True,
+            "count": email_count,
+            "source": "supabase_auth_admin",
+            "scanned": scanned,
+            "totalAuthUsers": total_count if total_count is not None else scanned,
+            "fetchedAt": now_ts(),
+            "error": "",
+        }
+    except urllib_error.HTTPError as err:
+        if err.code in {401, 403}:
+            message = "SUPABASE_SERVICE_ROLE_KEY 无权限"
+        else:
+            message = f"Supabase Auth 统计失败 ({err.code})"
+        summary = {
+            "configured": True,
+            "count": None,
+            "source": "supabase_auth_admin",
+            "error": message,
+        }
+    except Exception as err:
+        summary = {
+            "configured": True,
+            "count": None,
+            "source": "supabase_auth_admin",
+            "error": f"Supabase Auth 统计失败: {sanitize(err, 120)}",
+        }
+
+    with REGISTERED_USERS_CACHE_LOCK:
+        REGISTERED_USERS_CACHE["data"] = summary
+        REGISTERED_USERS_CACHE["expires_at"] = now + REGISTERED_USERS_CACHE_TTL
+    return summary
 
 
 def authorize_market_request(handler):
@@ -368,6 +486,7 @@ def build_stats():
                 "totalVisitors": count_row(conn, "SELECT COUNT(*) FROM visitors"),
                 "totalSessions": count_row(conn, "SELECT COUNT(*) FROM sessions"),
             },
+            "registeredUsers": fetch_registered_users_summary(),
             "newVisitors": {
                 "today": count_row(conn, "SELECT COUNT(*) FROM visitors WHERE first_seen>=?", (today_start,)),
                 "sevenDays": count_row(conn, "SELECT COUNT(*) FROM visitors WHERE first_seen>=?", (seven_start,)),
@@ -700,7 +819,7 @@ OPS_HTML = r"""<!doctype html>
     .status { color: var(--muted); font-size: 13px; }
     .metrics {
       display: grid;
-      grid-template-columns: repeat(6, minmax(150px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 12px;
     }
     .metric, .panel {
@@ -712,6 +831,7 @@ OPS_HTML = r"""<!doctype html>
     .metric { padding: 16px; min-height: 112px; }
     .label { color: var(--muted); font-size: 13px; }
     .value { margin-top: 8px; font-size: 28px; font-weight: 760; letter-spacing: 0; }
+    .value.small { font-size: 18px; line-height: 1.25; }
     .sub { margin-top: 6px; color: var(--muted); font-size: 12px; }
     .blue { color: var(--blue); } .green { color: var(--green); } .rose { color: var(--rose); }
     .amber { color: var(--amber); } .violet { color: var(--violet); }
@@ -761,6 +881,7 @@ OPS_HTML = r"""<!doctype html>
       <div class="metric"><div class="label">本月 PV</div><div class="value amber" id="monthPv">0</div><div class="sub">本月 UV <span id="monthUv">0</span></div></div>
       <div class="metric"><div class="label">活跃会话</div><div class="value rose" id="sessions">0</div><div class="sub">最近 30 分钟</div></div>
       <div class="metric"><div class="label">累计客户</div><div class="value" id="totalVisitors">0</div><div class="sub">今日新客 <span id="newToday">0</span></div></div>
+      <div class="metric"><div class="label">已注册客户</div><div class="value blue" id="registeredUsers">0</div><div class="sub" id="registeredUsersSub">邮箱注册账号</div></div>
     </section>
 
     <section class="grid">
@@ -826,6 +947,18 @@ OPS_HTML = r"""<!doctype html>
       $('sessions').textContent = fmt(data.realtime.activeSessions30m);
       $('totalVisitors').textContent = fmt(data.realtime.totalVisitors);
       $('newToday').textContent = fmt(data.newVisitors.today);
+      const registered = data.registeredUsers || {};
+      const registeredEl = $('registeredUsers');
+      const registeredSubEl = $('registeredUsersSub');
+      if (typeof registered.count === 'number') {
+        registeredEl.textContent = fmt(registered.count);
+        registeredEl.classList.remove('small');
+        registeredSubEl.textContent = '邮箱注册账号';
+      } else {
+        registeredEl.textContent = registered.configured ? '异常' : '未配置';
+        registeredEl.classList.add('small');
+        registeredSubEl.textContent = registered.error || '需要服务端密钥';
+      }
       renderBars(data.series.hourly || []);
       setRows('topPages', data.topPages || [], (x) => `<tr><td>${escapeHtml(x.path)}</td><td>${fmt(x.pv)}</td><td>${fmt(x.uv)}</td></tr>`);
       setRows('topReferrers', data.topReferrers || [], (x) => `<tr><td>${escapeHtml(x.referrer)}</td><td>${fmt(x.pv)}</td></tr>`);

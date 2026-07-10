@@ -6,6 +6,7 @@
 
 - `ADMIN_PASSWORD`：管理台管理员密码，必填。密码只保存在服务器环境变量中。
 - `ANALYTICS_SALT`：IP 哈希盐值，建议生产环境固定为随机长字符串。
+- `SUPABASE_SERVICE_ROLE_KEY`：Supabase service role key，用于统计 Auth 邮箱注册用户数。
 - `DB_PATH`：SQLite 文件路径，默认 `/data/analytics.sqlite3`。
 - `STATS_TZ`：统计时区，默认 `Asia/Shanghai`。
 - `PORT`：服务端口，默认 `8787`。
