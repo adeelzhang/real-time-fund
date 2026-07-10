@@ -587,11 +587,11 @@ def fetch_hot_sectors(handler, parsed):
 
     sector_sources = {
         "industry": {
-            "host": "push2.eastmoney.com",
+            "hosts": ["push2delay.eastmoney.com", "push2.eastmoney.com"],
             "fs": "m:90+t:2",
         },
         "concept": {
-            "host": "push2delay.eastmoney.com",
+            "hosts": ["push2delay.eastmoney.com", "push2.eastmoney.com"],
             "fs": "m:90+t:3",
         },
     }
@@ -614,17 +614,23 @@ def fetch_hot_sectors(handler, parsed):
                 "fields": "f12,f14,f3,f62",
             }
         )
-        api_url = f"https://{source['host']}/api/qt/clist/get?{query}"
-        try:
-            upstream_data = fetch_upstream_json(api_url, "https://quote.eastmoney.com/center/boardlist.html")
-            diff = upstream_data.get("data", {}).get("diff") if isinstance(upstream_data, dict) else None
-            if not isinstance(diff, list):
-                raise ValueError("东方财富接口返回格式异常")
-            data.extend(filter(None, (normalize_sector_quote(item, sector_type) for item in diff)))
-        except urllib_error.HTTPError as err:
-            errors.append(f"{sector_type}:{err.code}")
-        except Exception as err:
-            errors.append(f"{sector_type}:{sanitize(err, 120)}")
+        last_error = None
+        for host in source["hosts"]:
+            api_url = f"https://{host}/api/qt/clist/get?{query}"
+            try:
+                upstream_data = fetch_upstream_json(api_url, "https://quote.eastmoney.com/center/boardlist.html")
+                diff = upstream_data.get("data", {}).get("diff") if isinstance(upstream_data, dict) else None
+                if not isinstance(diff, list):
+                    raise ValueError("东方财富接口返回格式异常")
+                data.extend(filter(None, (normalize_sector_quote(item, sector_type) for item in diff)))
+                last_error = None
+                break
+            except urllib_error.HTTPError as err:
+                last_error = f"{sector_type}:{host}:{err.code}"
+            except Exception as err:
+                last_error = f"{sector_type}:{host}:{sanitize(err, 120)}"
+        if last_error:
+            errors.append(last_error)
 
     if not data:
         json_response(
