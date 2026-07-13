@@ -6,7 +6,7 @@ import { isArray } from 'lodash';
 import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { formatMoney } from '@/lib/utils';
-import { fetchFundHistory, fetchFundHoldings, fetchStockIntradayBatch } from '../api/fund';
+import { fetchFundHistory, fetchFundManagerHoldings, fetchStockIntradayBatch } from '../api/fund';
 import * as qk from '../lib/query-keys';
 import { useModalStore, useStorageStore } from '../stores';
 import FundIntradayChart from './FundIntradayChart';
@@ -105,51 +105,26 @@ const buildHistoryRows = (history) => {
     .reverse();
 };
 
-const getChinaDate = () => {
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Shanghai',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).formatToParts(new Date());
-    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-    return `${values.year}-${values.month}-${values.day}`;
-  } catch {
-    return new Date().toISOString().slice(0, 10);
-  }
-};
-
 const buildFundIntradayFromHoldings = (holdings, intradayByCode, referenceNav, equityExposurePct) => {
   if (!isArray(holdings) || !intradayByCode || referenceNav == null) return { series: [], date: null };
   const equityExposure = asNumber(equityExposurePct);
-  if (equityExposure == null || equityExposure <= 0 || equityExposure > 100) return { series: [], date: null };
   const seriesRows = holdings
     .map((holding) => {
       const quote = intradayByCode[holding.code];
       const points = quote?.points;
       const weight = asNumber(String(holding.weight ?? '').replace('%', ''));
-      const previousClose = asNumber(quote?.previousClose);
-      if (
-        !quote?.isCurrentMarketDate ||
-        !quote?.date ||
-        !isArray(points) ||
-        points.length < 2 ||
-        weight == null ||
-        weight <= 0 ||
-        previousClose == null ||
-        previousClose <= 0
-      ) {
+      const firstPrice = asNumber(points?.[0]?.price);
+      const quotedPreviousClose = asNumber(quote?.previousClose);
+      if (!isArray(points) || points.length < 2 || weight == null || weight <= 0 || firstPrice == null) {
         return null;
       }
-      return { points, weight, previousClose, date: quote.date };
+      const previousClose = quotedPreviousClose && quotedPreviousClose > 0 ? quotedPreviousClose : firstPrice;
+      return { points, weight, previousClose, date: quote?.date || null };
     })
     .filter(Boolean);
   const sessionDates = new Set(seriesRows.map((item) => item.date));
   const totalWeight = seriesRows.reduce((sum, item) => sum + item.weight, 0);
-  if (seriesRows.length < 3 || sessionDates.size !== 1 || totalWeight < 15) {
-    return { series: [], date: null };
-  }
+  if (seriesRows.length === 0 || totalWeight <= 0) return { series: [], date: null };
 
   const times = [...new Set(seriesRows.flatMap((item) => item.points.map((point) => point.time)))].sort();
   const priceMaps = seriesRows.map((item) => ({
@@ -165,17 +140,17 @@ const buildFundIntradayFromHoldings = (holdings, intradayByCode, referenceNav, e
         if (currentPrice != null) item.lastPrice = currentPrice;
         const price = item.lastPrice;
         if (price == null) return;
-        weightedChange += ((price / item.previousClose - 1) * item.weight) / totalWeight;
+        weightedChange += ((price / item.previousClose - 1) * 100 * item.weight) / totalWeight;
       });
-      const percentage = weightedChange * (equityExposure / 100);
+      const percentage = weightedChange * ((equityExposure ?? 100) / 100);
       return {
         time,
         value: referenceNav * (1 + percentage / 100),
-        date: seriesRows[0].date
+        date: sessionDates.size === 1 ? seriesRows[0].date : null
       };
     })
     .filter(Boolean);
-  return { series, date: seriesRows[0].date };
+  return { series, date: sessionDates.size === 1 ? seriesRows[0].date : null };
 };
 
 function Metric({ label, value, delta, masked = false }) {
@@ -233,7 +208,7 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
     if (!fundCode) return;
     let cancelled = false;
     setHoldingsLoading(true);
-    fetchFundHoldings(fundCode)
+    fetchFundManagerHoldings(fundCode)
       .then((result) => {
         if (!cancelled) setTopHoldings(result || null);
       })
@@ -273,24 +248,21 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
   const holdingShare = asNumber(holding?.share);
   const totalGain = asNumber(profit?.profitTotal);
   const dayGain = asNumber(profit?.profitToday);
-  const currentSeries = fund.fundValuationTimeseries?.[fundCode] || cardProps?.valuationSeries?.[fundCode] || [];
-  const today = getChinaDate();
-  const currentSeriesDate =
-    (isArray(currentSeries) && (currentSeries[0]?.date || currentSeries[currentSeries.length - 1]?.date)) ||
-    formatDate(fund.gztime);
-  const validCurrentSeries =
-    isArray(currentSeries) && currentSeries.length >= 2 && currentSeriesDate === today ? currentSeries : [];
-  const equityExposure = allocationRows.find((item) => String(item?.name || '').includes('股票'))?.value;
+  const equityExposure = topHoldings?.equityExposurePct;
   const derivedIntradayResult = buildFundIntradayFromHoldings(
     holdingRows,
     stockIntraday,
     asNumber(fund.dwjz),
     equityExposure
   );
-  const usesDirectValuation = validCurrentSeries.length >= 2;
-  const effectiveIntraday = usesDirectValuation ? validCurrentSeries : derivedIntradayResult.series;
+  const effectiveIntraday = derivedIntradayResult.series;
   const hasIntraday = effectiveIntraday.length >= 2;
-  const intradaySource = usesDirectValuation ? '估值源' : hasIntraday ? '重仓估算' : null;
+  const intradaySource = hasIntraday ? 'Fund Manager 重仓估算' : null;
+  const referenceNav = asNumber(fund.dwjz);
+  const intradayChange =
+    hasIntraday && referenceNav
+      ? ((effectiveIntraday[effectiveIntraday.length - 1].value - referenceNav) / referenceNav) * 100
+      : currentChange;
   const stockQuoteDates = [
     ...new Set(
       Object.values(stockIntraday)
@@ -388,7 +360,7 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
             </section>
 
             <section className="fund-manager-section">
-              <SectionTitle value={formatPercent(currentChange)} valueDelta={currentChange}>
+              <SectionTitle value={formatPercent(intradayChange)} valueDelta={intradayChange}>
                 日内走势{intradaySource ? <small className="fund-manager-source-tag">{intradaySource}</small> : null}
               </SectionTitle>
               {hasIntraday ? (
@@ -404,7 +376,7 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
                   />
                 </div>
               ) : (
-                <div className="fund-manager-empty">今日暂无可用的日内行情</div>
+                <div className="fund-manager-empty">暂无可用的日内行情</div>
               )}
             </section>
 

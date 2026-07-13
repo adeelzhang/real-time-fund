@@ -1762,9 +1762,98 @@ export const fetchFundHoldings = async (code) => {
   });
 };
 
+const fetchSinaFundTopHoldResponse = (code) => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return Promise.resolve(null);
+  const fundCode = String(code || '').trim();
+  if (!fundCode) return Promise.resolve(null);
+
+  return getQueryClient().fetchQuery({
+    queryKey: ['sinaFundTopHold', fundCode],
+    queryFn: () =>
+      new Promise((resolve) => {
+        const callbackName = `jsonp_sina_tophold_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+        const script = document.createElement('script');
+        let timer;
+        let settled = false;
+        const cleanup = () => {
+          if (timer) clearTimeout(timer);
+          try {
+            delete window[callbackName];
+          } catch {}
+          if (document.body?.contains(script)) document.body.removeChild(script);
+        };
+        const finish = (value) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve(value);
+        };
+        window[callbackName] = (payload) => finish(payload);
+        timer = setTimeout(() => finish(null), 10000);
+        script.src = `https://stock.finance.sina.com.cn/fundInfo/api/openapi.php/FdFundService.getTopHold?format=json&symbol=${encodeURIComponent(fundCode)}&callback=${callbackName}`;
+        script.async = true;
+        script.onerror = () => finish(null);
+        document.body.appendChild(script);
+      }),
+    staleTime: 24 * 60 * 60 * 1000
+  });
+};
+
+/**
+ * Fund Manager 详情页专用持仓数据。保持与 fund-manager 项目一致：
+ * Morningstar 提供持仓，新浪 getTopHold 提供股票仓位。
+ */
+export const fetchFundManagerHoldings = async (code) => {
+  const fundCode = String(code || '').trim();
+  if (!fundCode) return { holdings: [], assetAllocation: [], equityExposurePct: null };
+
+  const [morningstar, sina] = await Promise.all([
+    getQueryClient().fetchQuery({
+      queryKey: ['morningstarFundHoldings', fundCode],
+      queryFn: async () => {
+        const response = await fetch(
+          `https://www.morningstar.cn/cn-api/v2/funds/${encodeURIComponent(fundCode)}/holdings`
+        );
+        if (!response.ok) throw new Error(`Morningstar 持仓加载失败: ${response.status}`);
+        return response.json();
+      },
+      staleTime: 24 * 60 * 60 * 1000
+    }),
+    fetchSinaFundTopHoldResponse(fundCode)
+  ]);
+
+  const equityHoldings = isArray(morningstar?.data?.equityHoldings) ? morningstar.data.equityHoldings : [];
+  const holdings = equityHoldings.slice(0, 10).map((item) => ({
+    code: String(item?.ticker || '').trim(),
+    name: item?.name || '',
+    weight: Number(item?.weight),
+    sector: item?.sector || '',
+    change: null
+  }));
+  const allocationSource = isArray(sina?.result?.data?.zcpz) ? sina.result.data.zcpz : [];
+  const allocationRows = allocationSource
+    .filter((item) => item?.name && item.name !== 'TOTFDNAV')
+    .map((item) => ({ name: item.name, value: Number(item.value) }))
+    .filter((item) => Number.isFinite(item.value));
+  const equityExposurePct =
+    allocationRows.find((item) => item.name.includes('权益类') || item.name.includes('股票'))?.value ?? null;
+
+  return {
+    holdings,
+    holdingsReportDate: morningstar?.data?.portfolioDate || null,
+    holdingsIsLastQuarter: true,
+    assetAllocation: allocationRows,
+    equityExposurePct,
+    holdingsSource: 'morningstar'
+  };
+};
+
 const normalizeMinuteQuoteCode = (input) => {
   const raw = String(input || '').trim();
   if (!raw) return null;
+  if (/^[A-Za-z]{1,10}$/.test(raw)) return `us${raw.toUpperCase()}.OQ`;
+  const usMatch = raw.match(/^(?:us)?([A-Za-z]{1,10})(?:\.(?:US|OQ|N|A))?$/i);
+  if (usMatch) return `us${usMatch[1].toUpperCase()}.OQ`;
   if (/^(sh|sz|bj|hk)\w+$/i.test(raw)) return raw.toLowerCase();
   if (/^\d{6}$/.test(raw)) {
     if (raw.startsWith('6') || raw.startsWith('9')) return `sh${raw}`;
@@ -1798,13 +1887,23 @@ const fetchStockMinuteSeries = async (rawCode) => {
   return getQueryClient().fetchQuery({
     queryKey: ['stockMinuteSeries', minuteCode, 'withQuoteMeta'],
     queryFn: async () => {
-      const url = `https://ifzq.gtimg.cn/appstock/app/minute/query?code=${encodeURIComponent(minuteCode)}`;
+      const isUS = minuteCode.startsWith('us');
+      const url = isUS
+        ? `https://web.ifzq.gtimg.cn/appstock/app/UsMinute/query?_var=min_data_${minuteCode.replace(/\./g, '')}&code=${encodeURIComponent(minuteCode)}&r=${Math.random()}`
+        : `https://ifzq.gtimg.cn/appstock/app/minute/query?code=${encodeURIComponent(minuteCode)}`;
       const response = await fetch(url);
       if (!response.ok) throw new Error(`分钟行情加载失败: ${response.status}`);
-      const payload = await response.json();
-      const record = payload?.data?.[minuteCode];
+      let resolvedPayload;
+      if (isUS) {
+        const text = await response.text();
+        const jsonStart = text.indexOf('{');
+        resolvedPayload = jsonStart >= 0 ? JSON.parse(text.slice(jsonStart)) : null;
+      } else {
+        resolvedPayload = await response.json();
+      }
+      const record = resolvedPayload?.data?.[minuteCode];
       const points = parseMinutePoints(record?.data?.data);
-      const quote = record?.qt?.[minuteCode];
+      const quote = resolvedPayload?.data?.[minuteCode]?.qt?.[minuteCode];
       const quoteTimestamp = String(quote?.[30] || '');
       const rawDate = String(record?.data?.date || quoteTimestamp.slice(0, 8) || '');
       const date = /^\d{8}$/.test(rawDate)
@@ -1819,19 +1918,39 @@ const fetchStockMinuteSeries = async (rawCode) => {
           : null;
       const previousClose =
         Number.isFinite(directPreviousClose) && directPreviousClose > 0 ? directPreviousClose : inferredPreviousClose;
-      const today = dayjs().tz(DEFAULT_TZ).format('YYYY-MM-DD');
-
       return {
+        minuteCode,
         points,
         date,
         currentPrice: Number.isFinite(currentPrice) ? currentPrice : null,
         previousClose: Number.isFinite(previousClose) ? previousClose : null,
-        changePct: Number.isFinite(changePct) ? changePct : null,
-        isCurrentMarketDate: date === today
+        changePct: Number.isFinite(changePct) ? changePct : null
       };
     },
     staleTime: 60 * 1000
   });
+};
+
+const fetchTencentSimpleQuoteBatch = async (minuteCodes) => {
+  const codes = [...new Set(minuteCodes.filter((code) => code && !code.startsWith('us')))];
+  if (codes.length === 0) return {};
+
+  const response = await fetch(`https://qt.gtimg.cn/q=${codes.map((code) => `s_${code}`).join(',')}`);
+  if (!response.ok) throw new Error(`腾讯实时行情加载失败: ${response.status}`);
+  const text = await response.text();
+  const result = {};
+  text.split(';').forEach((line) => {
+    const match = line.match(/v_s_([^=]+)="([^"]*)/);
+    if (!match) return;
+    const requestCode = match[1];
+    const parts = match[2].split('~');
+    const price = Number(parts[3]);
+    const pct = Number(parts[5]);
+    if (Number.isFinite(price) && price > 0 && Number.isFinite(pct)) {
+      result[requestCode] = { price, pct };
+    }
+  });
+  return result;
 };
 
 /**
@@ -1840,6 +1959,8 @@ const fetchStockMinuteSeries = async (rawCode) => {
 export const fetchStockIntradayBatch = async (holdings = []) => {
   const rows = isArray(holdings) ? holdings.filter((item) => item?.code).slice(0, 10) : [];
   const result = {};
+  const minuteCodes = rows.map((item) => normalizeMinuteQuoteCode(item.code)).filter(Boolean);
+  const simpleQuotes = await fetchTencentSimpleQuoteBatch(minuteCodes);
   for (let index = 0; index < rows.length; index += 4) {
     const batch = rows.slice(index, index + 4);
     const resolved = await Promise.all(
@@ -1851,8 +1972,30 @@ export const fetchStockIntradayBatch = async (holdings = []) => {
         }
       })
     );
-    resolved.forEach(([code, quote]) => {
-      if (quote?.points?.length > 0) result[code] = quote;
+    resolved.forEach(([code, minuteData]) => {
+      if (!minuteData?.points?.length) return;
+      const simpleQuote = simpleQuotes[minuteData.minuteCode];
+      const isUS = minuteData.minuteCode?.startsWith('us');
+      const firstPrice = Number(minuteData.points[0]?.price);
+      const lastPrice = Number(minuteData.points[minuteData.points.length - 1]?.price);
+      const fallbackPct =
+        Number.isFinite(firstPrice) && firstPrice > 0 && Number.isFinite(lastPrice)
+          ? (lastPrice / firstPrice - 1) * 100
+          : null;
+      const price = simpleQuote?.price ?? (Number.isFinite(lastPrice) ? lastPrice : null);
+      const changePct = simpleQuote?.pct ?? fallbackPct;
+      const previousClose =
+        Number.isFinite(price) && price > 0 && Number.isFinite(changePct) && changePct > -100
+          ? price / (1 + changePct / 100)
+          : Number.isFinite(firstPrice)
+            ? firstPrice
+            : null;
+      result[code] = {
+        ...minuteData,
+        currentPrice: price,
+        changePct,
+        previousClose: isUS ? firstPrice : previousClose
+      };
     });
   }
   return result;
