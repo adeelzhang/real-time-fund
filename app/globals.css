@@ -2973,8 +2973,7 @@ html::-webkit-scrollbar-thumb:active,
 }
 
 .fund-detail-surface-flat,
-.fund-detail-surface-flat .fund-card-drawer,
-.fund-detail-surface-flat .fund-card-manager {
+.fund-detail-surface-flat .fund-card-drawer {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   background-color: var(--card) !important;
@@ -3003,7 +3002,8 @@ html::-webkit-scrollbar-thumb:active,
 
 .fund-manager-detail-shell .glass,
 .fund-manager-detail-shell .card,
-.fund-manager-detail-shell [class*='backdrop-blur'] {
+.fund-manager-detail-shell [class*='backdrop-blur'],
+.fund-manager-detail-shell .chart-overlay {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
@@ -3078,14 +3078,239 @@ html::-webkit-scrollbar-thumb:active,
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  padding: 16px 16px 24px;
+  padding: 12px 12px 24px;
   background: var(--bg);
 }
 
-.fund-manager-detail-body > .fund-card-manager {
+.fund-manager-detail-content {
   width: min(100%, 960px);
   margin: 0 auto;
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fund-manager-hero,
+.fund-manager-section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.fund-manager-hero {
+  padding: 20px;
+}
+
+.fund-manager-hero-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.fund-manager-nav-row {
+  min-height: 48px;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.fund-manager-nav-row > strong {
+  color: var(--text);
+  font-size: 36px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  line-height: 1.15;
+}
+
+.fund-manager-nav-row > span {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.fund-manager-metrics,
+.fund-manager-period-grid {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fund-manager-metric {
+  min-width: 0;
+  min-height: 70px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--table-row-alt-bg);
+}
+
+.fund-manager-metric > span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fund-manager-metric > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fund-manager-section {
+  padding: 18px;
+}
+
+.fund-manager-section-heading {
+  min-height: 28px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fund-manager-section-heading h3 {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 4px solid var(--primary);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.fund-manager-section-heading > strong {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fund-manager-trend-section .fund-history-table-wrapper {
+  border-radius: 8px !important;
+}
+
+.fund-manager-intraday > div > div:last-child {
+  height: 180px !important;
+}
+
+.fund-manager-period-grid {
+  margin-top: 0;
+}
+
+.fund-manager-period-grid .fund-manager-metric {
+  min-height: 62px;
+  text-align: center;
+}
+
+.fund-manager-allocation-row {
+  margin: -2px 0 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fund-manager-allocation-row strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.fund-manager-holdings {
+  width: 100%;
+}
+
+.fund-manager-holding-head,
+.fund-manager-holding-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(76px, 0.7fr) minmax(84px, 0.8fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.fund-manager-holding-head {
+  padding: 0 8px 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.fund-manager-holding-head span:not(:first-child),
+.fund-manager-holding-row > strong,
+.fund-manager-weight {
+  text-align: right;
+}
+
+.fund-manager-holding-row {
+  min-height: 58px;
+  padding: 9px 8px;
+  border-top: 1px solid var(--border);
+}
+
+.fund-manager-holding-row > strong,
+.fund-manager-weight > strong {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fund-manager-holding-name {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fund-manager-holding-name strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fund-manager-holding-name small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.fund-manager-weight {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.fund-manager-weight i {
+  height: 3px;
+  max-width: 100%;
+  display: block;
+  border-radius: 3px;
+  background: var(--primary);
+}
+
+.fund-manager-empty {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .fund-manager-detail-footer {
@@ -3118,6 +3343,44 @@ html::-webkit-scrollbar-thumb:active,
 
   .fund-manager-detail-body {
     padding: 20px 24px 28px;
+  }
+
+  .fund-manager-hero {
+    padding: 24px;
+  }
+
+  .fund-manager-section {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 420px) {
+  .fund-manager-hero,
+  .fund-manager-section {
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .fund-manager-detail-body {
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .fund-manager-nav-row > strong {
+    font-size: 34px;
+  }
+
+  .fund-manager-nav-row > span {
+    font-size: 18px;
+  }
+
+  .fund-manager-metric {
+    padding: 9px 8px;
+  }
+
+  .fund-manager-metric > strong {
+    font-size: 13px;
   }
 }
 

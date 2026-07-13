@@ -76,15 +76,15 @@ export default function MineTab({
         <li>
           <label className="mine-menu-row mine-menu-switch-row glass" htmlFor="manager-detail-style-switch">
             <span className="mine-menu-text">
-              <span className="mine-menu-label">基金详情样式</span>
-              <span className="mine-menu-description">{managerDetailEnabled ? '沉浸式' : '经典'}</span>
+              <span className="mine-menu-label">基金详情页</span>
+              <span className="mine-menu-description">{managerDetailEnabled ? 'Fund Manager 模式' : '经典模式'}</span>
             </span>
             <span className="mine-menu-switch-hit">
               <Switch
                 id="manager-detail-style-switch"
                 checked={managerDetailEnabled}
                 onCheckedChange={(checked) => onManagerDetailEnabledChange?.(Boolean(checked))}
-                aria-label="使用沉浸式基金详情"
+                aria-label="使用 Fund Manager 基金详情页"
               />
             </span>
           </label>
