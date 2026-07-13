@@ -1,13 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronDown, ChevronLeft } from 'lucide-react';
 import { isArray } from 'lodash';
+import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { formatMoney } from '@/lib/utils';
-import { fetchFundHoldings } from '../api/fund';
+import { fetchFundHistory, fetchFundHoldings, fetchStockIntradayBatch } from '../api/fund';
+import * as qk from '../lib/query-keys';
 import { useModalStore, useStorageStore } from '../stores';
 import FundIntradayChart from './FundIntradayChart';
+import FundManagerSparkline from './FundManagerSparkline';
 import FundTrendChart from './FundTrendChart';
 
 const selectSubModalOpen = (state) =>
@@ -60,6 +63,87 @@ const formatDate = (value) => {
   return match?.[1] || text.slice(0, 10);
 };
 
+const buildAnnualReturns = (history) => {
+  if (!isArray(history)) return [];
+  const sorted = [...history].filter((item) => item?.date).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const years = new Map();
+  sorted.forEach((item) => {
+    const year = String(item.date).slice(0, 4);
+    const value = asNumber(item.accumulatedNetValue) ?? asNumber(item.unitNetValue) ?? asNumber(item.value);
+    if (!/^\d{4}$/.test(year) || value == null) return;
+    const current = years.get(year);
+    if (!current) years.set(year, { year, first: value, last: value });
+    else current.last = value;
+  });
+  return [...years.values()]
+    .map((item) => ({
+      year: item.year,
+      value: item.first ? ((item.last - item.first) / item.first) * 100 : null
+    }))
+    .filter((item) => item.value != null)
+    .reverse();
+};
+
+const buildHistoryRows = (history) => {
+  if (!isArray(history)) return [];
+  const sorted = [...history].filter((item) => item?.date).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  return sorted
+    .map((item, index) => {
+      const previous = sorted[index - 1];
+      const unitNetValue = asNumber(item.unitNetValue) ?? asNumber(item.value);
+      const previousNav = asNumber(previous?.unitNetValue) ?? asNumber(previous?.value);
+      const dailyChange =
+        asNumber(item.equityReturn) ??
+        (unitNetValue != null && previousNav ? ((unitNetValue - previousNav) / previousNav) * 100 : null);
+      return {
+        date: item.date,
+        unitNetValue,
+        accumulatedNetValue: asNumber(item.accumulatedNetValue),
+        dailyChange
+      };
+    })
+    .reverse();
+};
+
+const buildFundIntradayFromHoldings = (holdings, intradayByCode, referenceNav) => {
+  if (!isArray(holdings) || !intradayByCode || referenceNav == null) return [];
+  const seriesRows = holdings
+    .map((holding) => {
+      const points = intradayByCode[holding.code];
+      const weight = asNumber(String(holding.weight ?? '').replace('%', ''));
+      if (!isArray(points) || points.length < 2 || weight == null || weight <= 0) return null;
+      const firstPrice = asNumber(points[0]?.price);
+      if (!firstPrice) return null;
+      return { points, weight, firstPrice };
+    })
+    .filter(Boolean);
+  if (seriesRows.length === 0) return [];
+
+  const times = [...new Set(seriesRows.flatMap((item) => item.points.map((point) => point.time)))].sort();
+  const priceMaps = seriesRows.map((item) => ({
+    ...item,
+    prices: new Map(item.points.map((point) => [point.time, point.price]))
+  }));
+  return times
+    .map((time) => {
+      let weightedChange = 0;
+      let availableWeight = 0;
+      priceMaps.forEach((item) => {
+        const price = asNumber(item.prices.get(time));
+        if (price == null) return;
+        weightedChange += ((price - item.firstPrice) / item.firstPrice) * 100 * item.weight;
+        availableWeight += item.weight;
+      });
+      if (!availableWeight) return null;
+      const percentage = weightedChange / availableWeight;
+      return {
+        time,
+        value: referenceNav * (1 + percentage / 100)
+      };
+    })
+    .filter(Boolean);
+};
+
 function Metric({ label, value, delta, masked = false }) {
   return (
     <div className="fund-manager-metric">
@@ -82,7 +166,11 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
   const isAnySubModalOpen = useModalStore(selectSubModalOpen);
   const funds = useStorageStore((state) => state.funds);
   const [topHoldings, setTopHoldings] = useState(null);
+  const [stockIntraday, setStockIntraday] = useState({});
   const [holdingsLoading, setHoldingsLoading] = useState(false);
+  const [annualExpanded, setAnnualExpanded] = useState(false);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
+  const [historyVisibleCount, setHistoryVisibleCount] = useState(100);
   const finalBlockClose = blockClose || isAnySubModalOpen;
   const cardProps = row && getFundCardProps ? getFundCardProps(row) : null;
   const fallbackFund = cardProps?.fallbackFund || row?.rawFund || row || {};
@@ -92,6 +180,20 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
   const holding = cardProps?.holdings?.[fundCode];
   const profit = cardProps?.getHoldingProfit?.(fund, holding) ?? null;
   const masked = Boolean(cardProps?.masked);
+  const disclosedHoldings = topHoldings?.holdings;
+  const holdingRows = isArray(disclosedHoldings) ? disclosedHoldings : [];
+  const allocationRows = isArray(topHoldings?.assetAllocation) ? topHoldings.assetAllocation : [];
+
+  const {
+    data: fullHistory = [],
+    isPending: historyLoading,
+    isError: historyError
+  } = useQuery({
+    queryKey: qk.fundHistory(fundCode, 'all', 'accumulated'),
+    queryFn: () => fetchFundHistory(fundCode, 'all', { netValueType: 'accumulated' }),
+    enabled: Boolean(fundCode),
+    staleTime: 10 * 60 * 1000
+  });
 
   useEffect(() => {
     if (!fundCode) return;
@@ -112,6 +214,24 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
     };
   }, [fundCode]);
 
+  useEffect(() => {
+    if (!isArray(disclosedHoldings) || disclosedHoldings.length === 0) {
+      setStockIntraday({});
+      return;
+    }
+    let cancelled = false;
+    fetchStockIntradayBatch(disclosedHoldings)
+      .then((result) => {
+        if (!cancelled) setStockIntraday(result || {});
+      })
+      .catch(() => {
+        if (!cancelled) setStockIntraday({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [disclosedHoldings]);
+
   const currentNav = asNumber(fund.gsz) ?? asNumber(fund.dwjz);
   const currentChange = asNumber(fund.gszzl) ?? asNumber(fund.zzl);
   const displayDate = formatDate(fund.gztime || fund.time || fund.jzrq);
@@ -120,7 +240,9 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
   const totalGain = asNumber(profit?.profitTotal);
   const dayGain = asNumber(profit?.profitToday);
   const currentSeries = fund.fundValuationTimeseries?.[fundCode] || cardProps?.valuationSeries?.[fundCode] || [];
-  const hasIntraday = !fund.noValuation && isArray(currentSeries) && currentSeries.length > 0;
+  const derivedIntraday = buildFundIntradayFromHoldings(holdingRows, stockIntraday, asNumber(fund.dwjz));
+  const effectiveIntraday = isArray(currentSeries) && currentSeries.length >= 2 ? currentSeries : derivedIntraday;
+  const hasIntraday = effectiveIntraday.length >= 2;
   const transactions = profit ? cardProps?.transactions?.[fundCode] || [] : [];
   const periodMetrics = [
     ['近1月', cardProps?.fundExtraData?.month],
@@ -128,8 +250,8 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
     ['近6月', cardProps?.fundExtraData?.month6],
     ['近1年', cardProps?.fundExtraData?.year1]
   ];
-  const holdingRows = isArray(topHoldings?.holdings) ? topHoldings.holdings : [];
-  const allocationRows = isArray(topHoldings?.assetAllocation) ? topHoldings.assetAllocation : [];
+  const annualRows = buildAnnualReturns(fullHistory);
+  const historyRows = buildHistoryRows(fullHistory);
 
   const requestClose = () => {
     if (!finalBlockClose) onClose?.();
@@ -205,17 +327,18 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
                 transactions={transactions}
                 theme={cardProps?.theme || 'dark'}
                 hideHeader
+                showHistory={false}
               />
             </section>
 
-            {hasIntraday ? (
-              <section className="fund-manager-section">
-                <SectionTitle value={formatPercent(currentChange)} valueDelta={currentChange}>
-                  日内走势
-                </SectionTitle>
+            <section className="fund-manager-section">
+              <SectionTitle value={formatPercent(currentChange)} valueDelta={currentChange}>
+                日内走势
+              </SectionTitle>
+              {hasIntraday ? (
                 <div className="fund-manager-intraday">
                   <FundIntradayChart
-                    series={currentSeries}
+                    series={effectiveIntraday}
                     referenceNav={asNumber(fund.dwjz) ?? undefined}
                     theme={cardProps?.theme || 'dark'}
                     fundCode={fundCode}
@@ -224,8 +347,10 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
                     todayStr={cardProps?.todayStr}
                   />
                 </div>
-              </section>
-            ) : null}
+              ) : (
+                <div className="fund-manager-empty">暂无可用的日内行情</div>
+              )}
+            </section>
 
             <section className="fund-manager-section">
               <SectionTitle>阶段收益</SectionTitle>
@@ -253,17 +378,25 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
                 <div className="fund-manager-holdings">
                   <div className="fund-manager-holding-head">
                     <span>股票名称</span>
+                    <span>日内走势</span>
                     <span>最新涨跌</span>
                     <span>持仓占比</span>
                   </div>
                   {holdingRows.map((item, index) => {
                     const change = asNumber(item.change);
                     const weight = asNumber(String(item.weight ?? '').replace('%', ''));
+                    const stockSeries = stockIntraday[item.code] || [];
                     return (
                       <div className="fund-manager-holding-row" key={`${item.code || item.name}-${index}`}>
                         <span className="fund-manager-holding-name">
                           <strong>{item.name || '—'}</strong>
                           {item.code ? <small>{item.code}</small> : null}
+                        </span>
+                        <span className="fund-manager-holding-sparkline">
+                          <FundManagerSparkline
+                            values={stockSeries.map((point) => point.price)}
+                            positive={change >= 0}
+                          />
                         </span>
                         <strong className={getDeltaClass(change)}>{formatPercent(change)}</strong>
                         <span className="fund-manager-weight">
@@ -277,6 +410,85 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
               ) : (
                 <div className="fund-manager-empty">暂无持仓明细</div>
               )}
+            </section>
+
+            <section className="fund-manager-section">
+              <button
+                type="button"
+                className="fund-manager-collapsible-heading"
+                aria-expanded={annualExpanded}
+                onClick={() => setAnnualExpanded((value) => !value)}
+              >
+                <span>年度回报</span>
+                <ChevronDown className={annualExpanded ? 'expanded' : ''} size={18} aria-hidden />
+              </button>
+              {annualExpanded ? (
+                historyLoading ? (
+                  <div className="fund-manager-empty">加载年度回报中...</div>
+                ) : annualRows.length > 0 ? (
+                  <div className="fund-manager-annual-table">
+                    <div className="fund-manager-annual-row fund-manager-table-head">
+                      <span>年度</span>
+                      <span>回报率</span>
+                    </div>
+                    {annualRows.map((item) => (
+                      <div className="fund-manager-annual-row" key={item.year}>
+                        <span>{item.year}</span>
+                        <strong className={getDeltaClass(item.value)}>{formatPercent(item.value)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="fund-manager-empty">{historyError ? '年度回报加载失败' : '暂无年度回报'}</div>
+                )
+              ) : null}
+            </section>
+
+            <section className="fund-manager-section">
+              <button
+                type="button"
+                className="fund-manager-collapsible-heading"
+                aria-expanded={historyExpanded}
+                onClick={() => setHistoryExpanded((value) => !value)}
+              >
+                <span>历史净值</span>
+                <ChevronDown className={historyExpanded ? 'expanded' : ''} size={18} aria-hidden />
+              </button>
+              {historyExpanded ? (
+                historyLoading ? (
+                  <div className="fund-manager-empty">加载历史净值中...</div>
+                ) : historyRows.length > 0 ? (
+                  <div className="fund-manager-history-table">
+                    <div className="fund-manager-history-row fund-manager-table-head">
+                      <span>日期</span>
+                      <span>单位净值</span>
+                      <span>累计净值</span>
+                      <span>日涨幅</span>
+                    </div>
+                    <div className="fund-manager-history-scroll">
+                      {historyRows.slice(0, historyVisibleCount).map((item) => (
+                        <div className="fund-manager-history-row" key={item.date}>
+                          <span>{item.date}</span>
+                          <span>{formatNav(item.unitNetValue)}</span>
+                          <span>{formatNav(item.accumulatedNetValue)}</span>
+                          <strong className={getDeltaClass(item.dailyChange)}>{formatPercent(item.dailyChange)}</strong>
+                        </div>
+                      ))}
+                      {historyRows.length > historyVisibleCount ? (
+                        <button
+                          type="button"
+                          className="fund-manager-load-more"
+                          onClick={() => setHistoryVisibleCount((count) => count + 100)}
+                        >
+                          加载更多
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="fund-manager-empty">{historyError ? '历史净值加载失败' : '暂无历史净值'}</div>
+                )
+              ) : null}
             </section>
           </div>
         </main>

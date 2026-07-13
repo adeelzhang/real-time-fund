@@ -65,7 +65,8 @@ export default function FundTrendChart({
   onToggleExpand,
   transactions = [],
   theme = 'dark',
-  hideHeader = false
+  hideHeader = false,
+  showHistory = true
 }) {
   const [range, setRange] = useState('3m');
   const chartRef = useRef(null);
@@ -886,7 +887,7 @@ export default function FundTrendChart({
         ))}
       </div>
 
-      <FundHistoryNetValue code={code} range={range} theme={theme} />
+      {showHistory ? <FundHistoryNetValue code={code} range={range} theme={theme} /> : null}
     </div>
   );
 

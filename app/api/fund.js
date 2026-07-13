@@ -1762,6 +1762,76 @@ export const fetchFundHoldings = async (code) => {
   });
 };
 
+const normalizeMinuteQuoteCode = (input) => {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
+  if (/^(sh|sz|bj|hk)\w+$/i.test(raw)) return raw.toLowerCase();
+  if (/^\d{6}$/.test(raw)) {
+    if (raw.startsWith('6') || raw.startsWith('9')) return `sh${raw}`;
+    if (raw.startsWith('4') || raw.startsWith('8')) return `bj${raw}`;
+    return `sz${raw}`;
+  }
+  if (/^\d{5}$/.test(raw)) return `hk${raw}`;
+  const hkMatch = raw.match(/^(\d{4,5})\.HK$/i);
+  if (hkMatch) return `hk${hkMatch[1].padStart(5, '0')}`;
+  return null;
+};
+
+const parseMinutePoints = (rows) => {
+  if (!isArray(rows)) return [];
+  return rows
+    .map((line) => {
+      const [rawTime, rawPrice] = String(line || '').split(' ');
+      const price = Number(rawPrice);
+      if (!rawTime || rawTime.length < 4 || !Number.isFinite(price)) return null;
+      return {
+        time: `${rawTime.slice(0, 2)}:${rawTime.slice(2, 4)}`,
+        price
+      };
+    })
+    .filter(Boolean);
+};
+
+const fetchStockMinuteSeries = async (rawCode) => {
+  const minuteCode = normalizeMinuteQuoteCode(rawCode);
+  if (!minuteCode) return [];
+  return getQueryClient().fetchQuery({
+    queryKey: ['stockMinuteSeries', minuteCode],
+    queryFn: async () => {
+      const url = `https://ifzq.gtimg.cn/appstock/app/minute/query?code=${encodeURIComponent(minuteCode)}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`分钟行情加载失败: ${response.status}`);
+      const payload = await response.json();
+      return parseMinutePoints(payload?.data?.[minuteCode]?.data?.data);
+    },
+    staleTime: 60 * 1000
+  });
+};
+
+/**
+ * 批量获取重仓股分钟行情。每批最多并发 4 个请求，返回值按原始股票代码索引。
+ */
+export const fetchStockIntradayBatch = async (holdings = []) => {
+  const rows = isArray(holdings) ? holdings.filter((item) => item?.code).slice(0, 10) : [];
+  const result = {};
+  for (let index = 0; index < rows.length; index += 4) {
+    const batch = rows.slice(index, index + 4);
+    const resolved = await Promise.all(
+      batch.map(async (item) => {
+        try {
+          return [item.code, await fetchStockMinuteSeries(item.code)];
+        } catch {
+          return [item.code, []];
+        }
+      })
+    );
+    resolved.forEach(([code, points]) => {
+      if (points.length > 0) result[code] = points;
+    });
+  }
+  return result;
+};
+
 export const searchFunds = async (val) => {
   const normalized = String(val || '').trim();
   if (!normalized) return [];

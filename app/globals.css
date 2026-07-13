@@ -3238,9 +3238,9 @@ html::-webkit-scrollbar-thumb:active,
 .fund-manager-holding-head,
 .fund-manager-holding-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(76px, 0.7fr) minmax(84px, 0.8fr);
+  grid-template-columns: minmax(82px, 1fr) minmax(44px, 0.7fr) 62px 68px;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 .fund-manager-holding-head {
@@ -3253,6 +3253,10 @@ html::-webkit-scrollbar-thumb:active,
 .fund-manager-holding-row > strong,
 .fund-manager-weight {
   text-align: right;
+}
+
+.fund-manager-holding-head span:nth-child(2) {
+  text-align: center;
 }
 
 .fund-manager-holding-row {
@@ -3288,6 +3292,25 @@ html::-webkit-scrollbar-thumb:active,
   font-size: 10px;
 }
 
+.fund-manager-holding-sparkline {
+  min-width: 0;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fund-manager-sparkline {
+  width: 100%;
+  height: 42px;
+  display: block;
+}
+
+.fund-manager-sparkline-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .fund-manager-weight {
   min-width: 0;
   display: flex;
@@ -3311,6 +3334,105 @@ html::-webkit-scrollbar-thumb:active,
   justify-content: center;
   color: var(--muted);
   font-size: 13px;
+}
+
+.fund-manager-collapsible-heading {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 0 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  border-left: 4px solid var(--primary);
+  color: var(--text);
+  background: transparent;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fund-manager-collapsible-heading svg {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform 0.2s ease;
+}
+
+.fund-manager-collapsible-heading svg.expanded {
+  transform: rotate(180deg);
+}
+
+.fund-manager-collapsible-heading:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.fund-manager-annual-table,
+.fund-manager-history-table {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.fund-manager-annual-row,
+.fund-manager-history-row {
+  min-height: 44px;
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fund-manager-annual-row {
+  grid-template-columns: 1fr 1fr;
+}
+
+.fund-manager-annual-row > :last-child,
+.fund-manager-history-row > :not(:first-child) {
+  text-align: right;
+}
+
+.fund-manager-history-row {
+  grid-template-columns: 1.1fr repeat(3, minmax(0, 1fr));
+}
+
+.fund-manager-table-head {
+  color: var(--muted);
+  background: var(--table-row-alt-bg);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.fund-manager-history-scroll {
+  max-height: 400px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.fund-manager-load-more {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--primary);
+  background: transparent;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.fund-manager-load-more:hover,
+.fund-manager-load-more:focus-visible {
+  background: var(--table-row-alt-bg);
+}
+
+.fund-manager-load-more:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
 }
 
 .fund-manager-detail-footer {
@@ -3351,6 +3473,12 @@ html::-webkit-scrollbar-thumb:active,
 
   .fund-manager-section {
     padding: 20px;
+  }
+
+  .fund-manager-holding-head,
+  .fund-manager-holding-row {
+    grid-template-columns: minmax(160px, 1fr) minmax(180px, 1.6fr) 100px 120px;
+    gap: 14px;
   }
 }
 
