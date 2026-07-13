@@ -40,7 +40,8 @@ export default function MobileFundCardDrawer({
     >
       <DrawerTrigger asChild>{children}</DrawerTrigger>
       <DrawerContent
-        className="h-[85vh] max-h-[90vh] mt-0 flex flex-col"
+        overlayClassName="fund-detail-overlay-no-blur"
+        className="fund-detail-surface-flat h-[85vh] max-h-[90vh] mt-0 flex flex-col"
         onPointerDownOutside={(e) => {
           if (blockDrawerClose) return;
           if (typeof document !== 'undefined' && document.body.hasAttribute('data-photo-viewer-open')) {

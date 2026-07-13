@@ -2,9 +2,19 @@
 
 import Image from 'next/image';
 import { ChevronRight } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { LoginIcon } from './Icons';
 
-export default function MineTab({ visible = true, user, userAvatar, lastSyncDisplay, onLogin, onMyEarnings }) {
+export default function MineTab({
+  visible = true,
+  user,
+  userAvatar,
+  lastSyncDisplay,
+  onLogin,
+  onMyEarnings,
+  managerDetailEnabled = true,
+  onManagerDetailEnabledChange
+}) {
   return (
     <div className="mine-tab" style={{ display: visible ? undefined : 'none' }} aria-hidden={!visible || undefined}>
       <section className="mine-profile-card glass" aria-label="个人信息" style={{ position: 'relative' }}>
@@ -62,6 +72,22 @@ export default function MineTab({ visible = true, user, userAvatar, lastSyncDisp
             <span className="mine-menu-label">我的收益</span>
             <ChevronRight className="mine-menu-chevron" aria-hidden strokeWidth={2} />
           </button>
+        </li>
+        <li>
+          <label className="mine-menu-row mine-menu-switch-row glass" htmlFor="manager-detail-style-switch">
+            <span className="mine-menu-text">
+              <span className="mine-menu-label">基金详情样式</span>
+              <span className="mine-menu-description">{managerDetailEnabled ? '沉浸式' : '经典'}</span>
+            </span>
+            <span className="mine-menu-switch-hit">
+              <Switch
+                id="manager-detail-style-switch"
+                checked={managerDetailEnabled}
+                onCheckedChange={(checked) => onManagerDetailEnabledChange?.(Boolean(checked))}
+                aria-label="使用沉浸式基金详情"
+              />
+            </span>
+          </label>
         </li>
       </ul>
     </div>

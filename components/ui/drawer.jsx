@@ -187,6 +187,8 @@ function DrawerContent({
   defaultHeight = '77vh',
   minHeight = '20vh',
   maxHeight = '90vh',
+  overlayClassName,
+  overlayStyle,
   style: styleProp,
   ...props
 }) {
@@ -285,7 +287,7 @@ function DrawerContent({
 
   return (
     <DrawerPortal data-slot="drawer-portal">
-      <DrawerOverlay />
+      <DrawerOverlay className={overlayClassName} style={overlayStyle} />
       <DrawerPrimitive.Content
         data-slot="drawer-content"
         style={contentStyle}

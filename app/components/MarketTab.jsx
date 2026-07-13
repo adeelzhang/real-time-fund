@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import MobileFundCardDrawer from './MobileFundCardDrawer';
+import FundManagerDetail from './FundManagerDetail';
 import FundCard from './FundCard';
 import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -56,7 +57,8 @@ function FundDetailDialog({ cardDialogRow, getFundCardProps, setCardDialogRow })
       }}
     >
       <DialogContent
-        className="sm:max-w-2xl max-h-[88vh] flex flex-col p-0 overflow-hidden"
+        overlayClassName="fund-detail-overlay-no-blur"
+        className="fund-detail-surface-flat sm:max-w-2xl max-h-[88vh] flex flex-col p-0 overflow-hidden"
         onPointerDownOutside={(e) => {
           if (isAnySubModalOpen) e.preventDefault();
         }}
@@ -74,7 +76,7 @@ function FundDetailDialog({ cardDialogRow, getFundCardProps, setCardDialogRow })
   );
 }
 
-export default function MarketTab({ onAddFund, getFundCardProps, isActive }) {
+export default function MarketTab({ onAddFund, getFundCardProps, isActive, fundDetailStyle = 'manager' }) {
   const [detailFund, setDetailFund] = useState(null);
   const [detailFundExtra, setDetailFundExtra] = useState(null);
   const [pageIndex, setPageIndex] = useState(1);
@@ -814,7 +816,13 @@ export default function MarketTab({ onAddFund, getFundCardProps, isActive }) {
         return (
           detailFund &&
           detailCardProps &&
-          (isMobile ? (
+          (fundDetailStyle === 'manager' ? (
+            <FundManagerDetail
+              row={mappedFund}
+              getFundCardProps={() => detailCardProps}
+              onClose={() => setDetailFund(null)}
+            />
+          ) : isMobile ? (
             <MobileFundCardDrawer
               open={!!detailFund}
               onOpenChange={(open) => !open && setDetailFund(null)}

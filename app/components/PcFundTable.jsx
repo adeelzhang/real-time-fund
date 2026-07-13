@@ -58,6 +58,7 @@ import {
 import { storageStore } from '../stores';
 import { asyncPool } from '@/app/lib/asyncHelper';
 import MoveGroupModal from './MoveGroupModal';
+import FundManagerDetail from './FundManagerDetail';
 import { Badge } from '@/components/ui/badge';
 import { getTagThemeBadgeProps } from '@/app/components/AddTagDialog';
 import { cn } from '@/lib/utils';
@@ -65,6 +66,13 @@ import DataSourceAccuracyBadge from './DataSourceAccuracyBadge';
 import { useDataSourceAccuracyLabels } from '@/app/hooks/useDataSourceAccuracyLabels';
 
 const EditModeContext = createContext({ isEditMode: false, selectedCodes: null, toggleSelected: null });
+
+const isInteractiveRowTarget = (target, rowElement) => {
+  const control = target?.closest?.(
+    'button, a, input, select, textarea, label, [role="button"], [data-row-click-ignore]'
+  );
+  return Boolean(control && control !== rowElement);
+};
 
 const NON_FROZEN_COLUMN_IDS = [
   'dataSource',
@@ -197,11 +205,32 @@ const MemoizedTableRow = memo(
     fundExtraData,
     columnOrder,
     columnVisibility,
-    columnSizing
+    columnSizing,
+    onOpenCardDialog
   }) => {
+    const { isEditMode } = useContext(EditModeContext);
+    const canOpenDetail = Boolean(onOpenCardDialog) && !isEditMode;
+
     return (
       <SortableRow row={row} disabled={sortBy !== 'default'} enableAnimation={enableAnimation}>
-        <div className={`table-row table-row-scroll ${index % 2 === 1 ? 'row-even' : ''}`} data-masked={masked}>
+        <div
+          className={`table-row table-row-scroll ${index % 2 === 1 ? 'row-even' : ''} ${canOpenDetail ? 'fund-row-clickable' : ''}`}
+          data-masked={masked}
+          role={canOpenDetail ? 'button' : undefined}
+          tabIndex={canOpenDetail ? 0 : undefined}
+          aria-label={canOpenDetail ? `查看${row.original?.fundName || row.original?.code || '基金'}详情` : undefined}
+          onClick={(event) => {
+            if (!canOpenDetail || isInteractiveRowTarget(event.target, event.currentTarget)) return;
+            onOpenCardDialog(row.original);
+          }}
+          onKeyDown={(event) => {
+            if (!canOpenDetail || event.currentTarget !== event.target) return;
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onOpenCardDialog(row.original);
+            }
+          }}
+        >
           {row.getVisibleCells().map((cell) => {
             const columnId = cell.column.id || cell.column.columnDef?.accessorKey;
             const isNameColumn = columnId === 'fundName';
@@ -239,6 +268,7 @@ const MemoizedTableRow = memo(
       prevProps.columnOrder === nextProps.columnOrder &&
       prevProps.columnVisibility === nextProps.columnVisibility &&
       prevProps.columnSizing === nextProps.columnSizing &&
+      prevProps.onOpenCardDialog === nextProps.onOpenCardDialog &&
       prevProps.row.original === nextProps.row.original
     );
   }
@@ -542,6 +572,7 @@ FundNameCell.displayName = 'FundNameCell';
  * @param {(row: any) => void} [props.onToggleFavorite] - 添加/取消自选
  * @param {(row: any, meta: { hasHolding: boolean }) => void} [props.onHoldingAmountClick] - 点击持仓金额
  * @param {(row: any) => Object} [props.getFundCardProps] - 给定行返回 FundCard 的 props；传入后点击基金名称将用弹框展示卡片详情
+ * @param {'classic'|'manager'} [props.fundDetailStyle] - 基金详情页样式
  * @param {React.MutableRefObject<(() => void) | null>} [props.closeDialogRef] - 注入关闭弹框的方法，用于确认删除时关闭
  * @param {React.MutableRefObject<(() => void) | null>} [props.batchSelectionClearRef] - 注入清空批量选中状态的方法，用于父级批量删除二次确认成功后调用
  * @param {(codes: string[]) => boolean|void} [props.onRemoveFunds] - 批量删除；返回 false 表示已弹出二次确认，勿清空选中
@@ -575,7 +606,8 @@ const PcFundTable = memo(function PcFundTable({
   masked = false,
   relatedSectorSessionKey,
   onFundTagsClick,
-  fundExtraDataByCode = {}
+  fundExtraDataByCode = {},
+  fundDetailStyle = 'manager'
 }) {
   // 从 Zustand 读取删除确认弹框状态，避免 page.jsx 订阅导致全量重渲染
   const fundDeleteConfirm = useModalStore((s) => s.fundDeleteConfirm);
@@ -2971,6 +3003,7 @@ const PcFundTable = memo(function PcFundTable({
                                     columnOrder={columnOrder}
                                     columnVisibility={columnVisibility}
                                     columnSizing={columnSizing}
+                                    onOpenCardDialog={getFundCardProps ? handleOpenCardDialog : undefined}
                                   />
                                 </div>
                               );
@@ -3016,6 +3049,7 @@ const PcFundTable = memo(function PcFundTable({
                                 columnOrder={columnOrder}
                                 columnVisibility={columnVisibility}
                                 columnSizing={columnSizing}
+                                onOpenCardDialog={getFundCardProps ? handleOpenCardDialog : undefined}
                               />
                             ))}
                           </AnimatePresence>
@@ -3043,6 +3077,7 @@ const PcFundTable = memo(function PcFundTable({
                                 columnOrder={columnOrder}
                                 columnVisibility={columnVisibility}
                                 columnSizing={columnSizing}
+                                onOpenCardDialog={getFundCardProps ? handleOpenCardDialog : undefined}
                               />
                             ))}
                           </>
@@ -3268,14 +3303,22 @@ const PcFundTable = memo(function PcFundTable({
             </div>
           )}
         </div>
-        {!!(cardDialogRow && getFundCardProps) && (
-          <FundDetailDialog
-            blockDialogClose={blockDialogClose}
-            cardDialogRow={cardDialogRow}
-            getFundCardProps={getFundCardPropsWithRelatedSector}
-            setCardDialogRow={setCardDialogRow}
-          />
-        )}
+        {!!(cardDialogRow && getFundCardProps) &&
+          (fundDetailStyle === 'manager' ? (
+            <FundManagerDetail
+              row={cardDialogRow}
+              getFundCardProps={getFundCardPropsWithRelatedSector}
+              blockClose={blockDialogClose}
+              onClose={() => setCardDialogRow(null)}
+            />
+          ) : (
+            <FundDetailDialog
+              blockDialogClose={blockDialogClose}
+              cardDialogRow={cardDialogRow}
+              getFundCardProps={getFundCardPropsWithRelatedSector}
+              setCardDialogRow={setCardDialogRow}
+            />
+          ))}
         <PcTableSettingModal
           open={settingModalOpen}
           onClose={() => setSettingModalOpen(false)}
@@ -3345,7 +3388,8 @@ function FundDetailDialog({ blockDialogClose, cardDialogRow, getFundCardProps, s
       }}
     >
       <DialogContent
-        className="sm:max-w-2xl max-h-[88vh] flex flex-col p-0 overflow-hidden"
+        overlayClassName="fund-detail-overlay-no-blur"
+        className="fund-detail-surface-flat sm:max-w-2xl max-h-[88vh] flex flex-col p-0 overflow-hidden"
         onPointerDownOutside={(e) => {
           if (document.body.hasAttribute('data-photo-viewer-open')) {
             e.preventDefault();

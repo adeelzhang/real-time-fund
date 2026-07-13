@@ -24,6 +24,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { isArray, isFunction, isObject, isString, throttle } from 'lodash';
 import { Sparkles } from 'lucide-react';
 import MobileFundCardDrawer from './MobileFundCardDrawer';
+import FundManagerDetail from './FundManagerDetail';
 import MobileSettingModal from './MobileSettingModal';
 import MoveGroupModal from './MoveGroupModal';
 import SuccessModal from './SuccessModal';
@@ -130,6 +131,13 @@ const RowSortableContext = createContext({
   listeners: null,
   activatorProps: null
 });
+
+const isInteractiveRowTarget = (target, rowElement) => {
+  const control = target?.closest?.(
+    'button, a, input, select, textarea, label, [role="button"], [data-row-click-ignore]'
+  );
+  return Boolean(control && control !== rowElement);
+};
 
 function sortableRowA11yProps(attributes) {
   if (!attributes) return {};
@@ -378,14 +386,20 @@ const MemoizedMobileTableRow = memo(
     editLongPressRef,
     clearEditLongPressTimer,
     setIsEditMode,
-    setEditSelectedCodes
+    setEditSelectedCodes,
+    onOpenCardSheet
   }) => {
+    const canOpenDetail = Boolean(onOpenCardSheet) && !isEditMode;
+
     return (
       <SortableRow row={row} disabled={sortBy !== 'default' || !isEditMode}>
         {() => (
           <div
-            className="table-row"
+            className={`table-row ${canOpenDetail ? 'fund-row-clickable' : ''}`}
             data-masked={masked}
+            role={canOpenDetail ? 'button' : undefined}
+            tabIndex={canOpenDetail ? 0 : undefined}
+            aria-label={canOpenDetail ? `查看${row.original?.fundName || row.original?.code || '基金'}详情` : undefined}
             style={{
               background: index % 2 === 0 ? 'var(--bg)' : 'var(--table-row-alt-bg)',
               position: 'relative',
@@ -407,9 +421,12 @@ const MemoizedMobileTableRow = memo(
               if (!c) return;
               editLongPressRef.current.startX = e.clientX;
               editLongPressRef.current.startY = e.clientY;
+              editLongPressRef.current.didMove = false;
+              editLongPressRef.current.suppressNextClick = false;
               clearEditLongPressTimer();
               editLongPressRef.current.timer = setTimeout(() => {
                 editLongPressRef.current.timer = null;
+                editLongPressRef.current.suppressNextClick = true;
                 try {
                   const sel = typeof window !== 'undefined' && window.getSelection?.();
                   if (sel?.removeAllRanges) sel.removeAllRanges();
@@ -425,10 +442,32 @@ const MemoizedMobileTableRow = memo(
               if (!editLongPressRef.current.timer) return;
               const dx = Math.abs(e.clientX - editLongPressRef.current.startX);
               const dy = Math.abs(e.clientY - editLongPressRef.current.startY);
-              if (dx > 12 || dy > 12) clearEditLongPressTimer();
+              if (dx > 12 || dy > 12) {
+                editLongPressRef.current.didMove = true;
+                clearEditLongPressTimer();
+              }
             }}
             onPointerUp={clearEditLongPressTimer}
-            onPointerCancel={clearEditLongPressTimer}
+            onPointerCancel={() => {
+              editLongPressRef.current.didMove = true;
+              clearEditLongPressTimer();
+            }}
+            onClick={(event) => {
+              if (editLongPressRef.current.suppressNextClick || editLongPressRef.current.didMove) {
+                editLongPressRef.current.suppressNextClick = false;
+                editLongPressRef.current.didMove = false;
+                return;
+              }
+              if (!canOpenDetail || isInteractiveRowTarget(event.target, event.currentTarget)) return;
+              onOpenCardSheet(row.original);
+            }}
+            onKeyDown={(event) => {
+              if (!canOpenDetail || event.currentTarget !== event.target) return;
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onOpenCardSheet(row.original);
+              }
+            }}
           >
             {row.getVisibleCells().map((cell, cellIndex) => {
               const columnId = cell.column.id;
@@ -475,6 +514,7 @@ const MemoizedMobileTableRow = memo(
       prevProps.fundExtraData === nextProps.fundExtraData &&
       prevProps.tableColumnOrder === nextProps.tableColumnOrder &&
       prevProps.tableColumnVisibility === nextProps.tableColumnVisibility &&
+      prevProps.onOpenCardSheet === nextProps.onOpenCardSheet &&
       prevProps.row.original === nextProps.row.original
     );
   }
@@ -503,6 +543,7 @@ MemoizedMobileTableRow.displayName = 'MemoizedMobileTableRow';
  * @param {(payload: { codes: string[]; fromTab: string; targetId: string; dryRun?: boolean; overwrite?: boolean }) => Promise<{ conflicts?: string[] }|void>} [props.onMoveFunds] - 批量迁移分组（与 PC 一致）
  * @param {(open: boolean) => void} [props.onFundCardDrawerOpenChange] - 基金详情底部 Drawer 打开/关闭时通知父级（用于隐藏底栏等）
  * @param {(open: boolean) => void} [props.onMobileSettingModalOpenChange] - 移动端表格「个性化设置」弹框打开/关闭时通知父级（用于隐藏底栏等）
+ * @param {'classic'|'manager'} [props.fundDetailStyle] - 基金详情页样式
  * @param {(row: any) => void} [props.onFundTagsClick] - 点击标签列时打开编辑标签
  */
 const MobileFundTable = memo(function MobileFundTable({
@@ -531,7 +572,8 @@ const MobileFundTable = memo(function MobileFundTable({
   onFundCardDrawerOpenChange,
   onMobileSettingModalOpenChange,
   onFundTagsClick,
-  fundExtraDataByCode = {}
+  fundExtraDataByCode = {},
+  fundDetailStyle = 'manager'
 }) {
   // 从 Zustand 读取删除确认弹框状态，避免 page.jsx 订阅导致全量重渲染
   const fundDeleteConfirm = useModalStore((s) => s.fundDeleteConfirm);
@@ -560,7 +602,13 @@ const MobileFundTable = memo(function MobileFundTable({
   const [editSelectedCodes, setEditSelectedCodes] = useState(() => new Set());
   const [moveGroupOpen, setMoveGroupOpen] = useState(false);
 
-  const editLongPressRef = useRef({ timer: null, startX: 0, startY: 0 });
+  const editLongPressRef = useRef({
+    timer: null,
+    startX: 0,
+    startY: 0,
+    didMove: false,
+    suppressNextClick: false
+  });
 
   const selectableCodes = useMemo(() => (isArray(data) ? data.map((d) => d?.code).filter(Boolean) : []), [data]);
 
@@ -3017,6 +3065,7 @@ const MobileFundTable = memo(function MobileFundTable({
                         clearEditLongPressTimer={clearEditLongPressTimer}
                         setIsEditMode={setIsEditMode}
                         setEditSelectedCodes={setEditSelectedCodes}
+                        onOpenCardSheet={getFundCardProps ? handleOpenCardSheet : undefined}
                       />
                     ))}
                   </AnimatePresence>
@@ -3177,16 +3226,26 @@ const MobileFundTable = memo(function MobileFundTable({
             document.body
           )}
 
-        <MobileFundCardDrawer
-          open={!!(cardSheetRow && getFundCardProps)}
-          onOpenChange={(open) => {
-            if (!open) setCardSheetRow(null);
-          }}
-          blockDrawerClose={blockDrawerClose || moveGroupOpen}
-          ignoreNextDrawerCloseRef={ignoreNextDrawerCloseRef}
-          cardSheetRow={cardSheetRow}
-          getFundCardProps={getFundCardPropsWithRelatedSector}
-        />
+        {!!(cardSheetRow && getFundCardProps) &&
+          (fundDetailStyle === 'manager' ? (
+            <FundManagerDetail
+              row={cardSheetRow}
+              getFundCardProps={getFundCardPropsWithRelatedSector}
+              blockClose={blockDrawerClose || moveGroupOpen}
+              onClose={() => setCardSheetRow(null)}
+            />
+          ) : (
+            <MobileFundCardDrawer
+              open
+              onOpenChange={(open) => {
+                if (!open) setCardSheetRow(null);
+              }}
+              blockDrawerClose={blockDrawerClose || moveGroupOpen}
+              ignoreNextDrawerCloseRef={ignoreNextDrawerCloseRef}
+              cardSheetRow={cardSheetRow}
+              getFundCardProps={getFundCardPropsWithRelatedSector}
+            />
+          ))}
 
         {!onlyShowHeader && showPortalHeader && ReactDOM.createPortal(renderContent(true), document.body)}
 

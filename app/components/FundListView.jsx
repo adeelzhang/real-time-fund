@@ -70,7 +70,8 @@ const FundListView = React.memo(function FundListView({
   toggleValuationTrendCollapse,
   toggleEarningsCollapse,
   fundTagListsByCode,
-  groupTotalHoldingAmount
+  groupTotalHoldingAmount,
+  fundDetailStyle = 'manager'
 }) {
   return (
     <AnimatePresence mode="wait">
@@ -121,6 +122,7 @@ const FundListView = React.memo(function FundListView({
               closeDialogRef={fundDetailDialogCloseRef}
               masked={maskAmounts}
               getFundCardProps={getFundCardPropsForRow}
+              fundDetailStyle={fundDetailStyle}
               onFundTagsClick={openFundTagsEdit}
               fundExtraDataByCode={fundExtraDataByCode}
             />
@@ -161,6 +163,7 @@ const FundListView = React.memo(function FundListView({
               onFundCardDrawerOpenChange={handleFundCardDrawerOpenChange}
               onMobileSettingModalOpenChange={handleMobileSettingModalOpenChange}
               getFundCardProps={getFundCardPropsForRow}
+              fundDetailStyle={fundDetailStyle}
               masked={maskAmounts}
               onFundTagsClick={openFundTagsEdit}
               fundExtraDataByCode={fundExtraDataByCode}

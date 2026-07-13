@@ -203,7 +203,7 @@ export default function Index({
   onToggleTrendCollapse,
   onToggleValuationTrendCollapse,
   onToggleEarningsCollapse,
-  layoutMode = 'card', // 'card' | 'drawer'，drawer 时前10重仓与业绩走势以 Tabs 展示
+  layoutMode = 'card', // 'card' | 'drawer' | 'manager'，详情模式下用 Tabs 聚合内容
   masked = false,
   fundTags = [],
   onFundTagsClick,
@@ -374,16 +374,16 @@ export default function Index({
   const holdingLocked = (currentTab === 'all' || currentTab === 'fav') && isHoldingLinked;
   const holdingLinkedTitle = '持仓来自自定义分组汇总，点击选择分组后操作';
 
-  const style =
-    layoutMode === 'drawer'
-      ? {
-          border: 'none',
-          boxShadow: 'none',
-          paddingLeft: 0,
-          paddingRight: 0,
-          background: theme === 'light' ? 'rgb(250,250,250)' : 'none'
-        }
-      : {};
+  const isDetailLayout = layoutMode === 'drawer' || layoutMode === 'manager';
+  const style = isDetailLayout
+    ? {
+        border: 'none',
+        boxShadow: 'none',
+        paddingLeft: 0,
+        paddingRight: 0,
+        background: layoutMode === 'drawer' && theme === 'light' ? 'rgb(250,250,250)' : 'transparent'
+      }
+    : {};
 
   const isTrendExpanded = !collapsedTrends?.has(fundCode);
   const isValuationTrendExpanded = !collapsedValuationTrends?.has(fundCode);
@@ -392,7 +392,7 @@ export default function Index({
 
   return (
     <motion.div
-      className="glass card"
+      className={`glass card fund-card-${layoutMode}`}
       style={{
         position: 'relative',
         zIndex: 1,
@@ -885,7 +885,7 @@ export default function Index({
         );
       })()}
 
-      {layoutMode === 'drawer' ? (
+      {isDetailLayout ? (
         <Tabs defaultValue={hasHoldings ? 'holdings' : 'trend'} className="w-full">
           <TabsList className="w-full flex">
             {hasHoldings && <TabsTrigger value="holdings">前10重仓</TabsTrigger>}

@@ -372,6 +372,16 @@ export default function HomePage() {
   }, [isMobile, dynamicStyleMobile, dynamicStylePc]);
 
   const [mainTab, setMainTab] = useState('home');
+  const fundDetailStyle = customSettings?.fundDetailStyle === 'classic' ? 'classic' : 'manager';
+  const handleFundDetailStyleChange = useCallback(
+    (managerEnabled) => {
+      setCustomSettings((previous = {}) => ({
+        ...previous,
+        fundDetailStyle: managerEnabled ? 'manager' : 'classic'
+      }));
+    },
+    [setCustomSettings]
+  );
   const [hasVisitedMarketTab, setHasVisitedMarketTab] = useState(false);
 
   useEffect(() => {
@@ -5202,6 +5212,7 @@ export default function HomePage() {
                             toggleEarningsCollapse={toggleEarningsCollapse}
                             fundTagListsByCode={fundTagListsByCode}
                             groupTotalHoldingAmount={groupTotalHoldingAmount}
+                            fundDetailStyle={fundDetailStyle}
                           />
                         )}
                       </>
@@ -5276,6 +5287,7 @@ export default function HomePage() {
                 onAddFund={handleMarketTabAddFund}
                 getFundCardProps={getFundCardPropsForRow}
                 isActive={mainTab === 'market'}
+                fundDetailStyle={fundDetailStyle}
               />
             </div>
           )}
@@ -5289,6 +5301,8 @@ export default function HomePage() {
           lastSyncDisplay={lastSyncTime ? dayjs(lastSyncTime).format('MM-DD HH:mm') : null}
           onLogin={handleOpenLogin}
           onMyEarnings={() => setPortfolioEarningsOpen(true)}
+          managerDetailEnabled={fundDetailStyle === 'manager'}
+          onManagerDetailEnabledChange={handleFundDetailStyleChange}
         />
       )}
       {/* 弹框渲染层 - 独立组件，订阅 useModalStore，不触发 page.jsx 重渲染 */}
