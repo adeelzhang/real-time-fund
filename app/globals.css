@@ -3195,6 +3195,13 @@ html::-webkit-scrollbar-thumb:active,
   line-height: 1.4;
 }
 
+.fund-manager-source-tag {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
 .fund-manager-section-heading > strong {
   font-size: 14px;
   font-variant-numeric: tabular-nums;
@@ -3229,6 +3236,13 @@ html::-webkit-scrollbar-thumb:active,
 .fund-manager-allocation-row strong {
   color: var(--text);
   font-variant-numeric: tabular-nums;
+}
+
+.fund-manager-market-note {
+  margin: -4px 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
 }
 
 .fund-manager-holdings {

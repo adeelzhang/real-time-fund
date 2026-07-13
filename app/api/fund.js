@@ -1794,15 +1794,41 @@ const parseMinutePoints = (rows) => {
 
 const fetchStockMinuteSeries = async (rawCode) => {
   const minuteCode = normalizeMinuteQuoteCode(rawCode);
-  if (!minuteCode) return [];
+  if (!minuteCode) return null;
   return getQueryClient().fetchQuery({
-    queryKey: ['stockMinuteSeries', minuteCode],
+    queryKey: ['stockMinuteSeries', minuteCode, 'withQuoteMeta'],
     queryFn: async () => {
       const url = `https://ifzq.gtimg.cn/appstock/app/minute/query?code=${encodeURIComponent(minuteCode)}`;
       const response = await fetch(url);
       if (!response.ok) throw new Error(`分钟行情加载失败: ${response.status}`);
       const payload = await response.json();
-      return parseMinutePoints(payload?.data?.[minuteCode]?.data?.data);
+      const record = payload?.data?.[minuteCode];
+      const points = parseMinutePoints(record?.data?.data);
+      const quote = record?.qt?.[minuteCode];
+      const quoteTimestamp = String(quote?.[30] || '');
+      const rawDate = String(record?.data?.date || quoteTimestamp.slice(0, 8) || '');
+      const date = /^\d{8}$/.test(rawDate)
+        ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
+        : null;
+      const currentPrice = Number(quote?.[3]);
+      const directPreviousClose = Number(quote?.[4]);
+      const changePct = Number(quote?.[32]);
+      const inferredPreviousClose =
+        Number.isFinite(currentPrice) && currentPrice > 0 && Number.isFinite(changePct) && changePct > -100
+          ? currentPrice / (1 + changePct / 100)
+          : null;
+      const previousClose =
+        Number.isFinite(directPreviousClose) && directPreviousClose > 0 ? directPreviousClose : inferredPreviousClose;
+      const today = dayjs().tz(DEFAULT_TZ).format('YYYY-MM-DD');
+
+      return {
+        points,
+        date,
+        currentPrice: Number.isFinite(currentPrice) ? currentPrice : null,
+        previousClose: Number.isFinite(previousClose) ? previousClose : null,
+        changePct: Number.isFinite(changePct) ? changePct : null,
+        isCurrentMarketDate: date === today
+      };
     },
     staleTime: 60 * 1000
   });
@@ -1825,8 +1851,8 @@ export const fetchStockIntradayBatch = async (holdings = []) => {
         }
       })
     );
-    resolved.forEach(([code, points]) => {
-      if (points.length > 0) result[code] = points;
+    resolved.forEach(([code, quote]) => {
+      if (quote?.points?.length > 0) result[code] = quote;
     });
   }
   return result;
