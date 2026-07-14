@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { motion, LayoutGroup, useReducedMotion } from 'framer-motion';
-import { Globe2, Home, TrendingUp, ChevronRight } from 'lucide-react';
+import { Globe2, Home, TrendingUp, UserRound, ChevronRight } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 const TABS = [
   { id: 'home', label: '首页', Icon: Home },
   { id: 'market', label: '行情', Icon: TrendingUp },
-  { id: 'global', label: '全球', Icon: Globe2 }
+  { id: 'global', label: '全球', Icon: Globe2 },
+  { id: 'mine', label: '我的', Icon: UserRound }
 ];
 
 export default function PcSideNav({ value, onChange }) {
@@ -30,6 +31,11 @@ export default function PcSideNav({ value, onChange }) {
       className={`pc-side-nav-container ${isHovered ? '' : 'collapsed'}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={() => setIsHovered(true)}
+      onFocusCapture={() => setIsHovered(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setIsHovered(false);
+      }}
     >
       <nav className="pc-side-nav" role="navigation" aria-label="侧边导航">
         <div className="pc-side-nav-handle">

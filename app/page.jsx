@@ -27,7 +27,7 @@ import FundCard from './components/FundCard';
 import GroupSummary from './components/GroupSummary';
 import GroupAccountSummaryCard from './components/GroupAccountSummaryCard';
 import { CloseIcon, GridIcon, ListIcon, MoonIcon, PlusIcon, SettingsIcon, SortIcon, SunIcon } from './components/Icons';
-import UserMenu from './components/UserMenu';
+import ShareButton from './components/ShareButton';
 import RefreshButton from './components/RefreshButton';
 import MarketIndexAccordion from './components/MarketIndexAccordion';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
@@ -314,7 +314,6 @@ export default function HomePage() {
   const setSortSettingOpen = (v) => _ms({ sortSettingOpen: isFunction(v) ? v(_gs().sortSettingOpen) : v });
   const setLoginModalOpen = (v) => _ms({ loginModalOpen: isFunction(v) ? v(_gs().loginModalOpen) : v });
   const setLoginInitialError = (v) => _ms({ loginInitialError: isFunction(v) ? v(_gs().loginInitialError) : v });
-  const setIsLogoutConfirmOpen = (v) => _ms({ isLogoutConfirmOpen: isFunction(v) ? v(_gs().isLogoutConfirmOpen) : v });
   const setPortfolioEarningsOpen = (v) =>
     _ms({ portfolioEarningsOpen: isFunction(v) ? v(_gs().portfolioEarningsOpen) : v });
   const setMobileFundDrawerOpen = (v) =>
@@ -4646,19 +4645,7 @@ export default function HomePage() {
                   <p>{theme === 'dark' ? '亮色' : '暗色'}</p>
                 </TooltipContent>
               </Tooltip>
-              <UserMenu
-                user={user}
-                userAvatar={userAvatar}
-                navbarHeight={navbarHeight}
-                lastSyncTime={lastSyncTime}
-                isSyncing={isSyncing}
-                onSync={() => user?.id && syncUserConfig(user.id)}
-                onOpenSettings={() => setSettingsOpen(true)}
-                onOpenPortfolioEarnings={() => setPortfolioEarningsOpen(true)}
-                onOpenLogin={handleOpenLogin}
-                onLogout={handleLogout}
-                onLogoutConfirmOpenChange={setIsLogoutConfirmOpen}
-              />
+              <ShareButton onNotify={showToast} />
             </div>
           </div>
           {shouldShowMarketIndex && (
@@ -5288,18 +5275,20 @@ export default function HomePage() {
           )}
         </>
       </div>
-      {isMobile && (
-        <MineTab
-          visible={mainTab === 'mine'}
-          user={user}
-          userAvatar={userAvatar}
-          lastSyncDisplay={lastSyncTime ? dayjs(lastSyncTime).format('MM-DD HH:mm') : null}
-          onLogin={handleOpenLogin}
-          onMyEarnings={() => setPortfolioEarningsOpen(true)}
-          managerDetailEnabled={fundDetailStyle === 'manager'}
-          onManagerDetailEnabledChange={handleFundDetailStyleChange}
-        />
-      )}
+      <MineTab
+        visible={mainTab === 'mine'}
+        user={user}
+        userAvatar={userAvatar}
+        lastSyncDisplay={lastSyncTime ? dayjs(lastSyncTime).format('MM-DD HH:mm') : null}
+        isSyncing={isSyncing}
+        onLogin={handleOpenLogin}
+        onLogout={handleLogout}
+        onSync={() => user?.id && syncUserConfig(user.id)}
+        onMyEarnings={() => setPortfolioEarningsOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+        managerDetailEnabled={fundDetailStyle === 'manager'}
+        onManagerDetailEnabledChange={handleFundDetailStyleChange}
+      />
       {/* 弹框渲染层 - 独立组件，订阅 useModalStore，不触发 page.jsx 重渲染 */}
       <ModalsLayer callbacksRef={modalCbRef} />
     </NavLayout>

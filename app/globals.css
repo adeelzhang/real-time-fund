@@ -3535,9 +3535,28 @@ html::-webkit-scrollbar-thumb:active,
 
 .mine-tab {
   display: flex;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
   padding-top: 4px;
+  padding-bottom: calc(var(--mobile-bottom-nav-height, 60px) + 24px);
+}
+
+.mine-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mine-section-title {
+  margin: 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
 }
 
 .mine-profile-card {
@@ -3585,6 +3604,16 @@ html::-webkit-scrollbar-thumb:active,
   word-break: break-all;
 }
 
+.mine-profile-status {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.mine-profile-sync {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
 .mine-profile-login-btn {
   margin-top: 10px;
   display: inline-flex;
@@ -3626,6 +3655,20 @@ html::-webkit-scrollbar-thumb:active,
   box-sizing: border-box;
 }
 
+.mine-menu-row:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.mine-menu-row.danger {
+  color: var(--danger);
+}
+
+.mine-menu-row.danger:hover {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
 [data-theme='light'] .mine-menu-row {
   background: rgba(255, 255, 255, 0.5);
 }
@@ -3637,8 +3680,31 @@ html::-webkit-scrollbar-thumb:active,
   color: var(--muted);
 }
 
-.mine-menu-label {
+.mine-menu-main {
+  display: flex;
+  min-width: 0;
   flex: 1;
+  align-items: center;
+  gap: 12px;
+}
+
+.mine-menu-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
+.mine-menu-row.danger .mine-menu-icon {
+  color: var(--danger);
+}
+
+.mine-menu-icon.is-spinning {
+  animation: spin 0.8s linear infinite;
+}
+
+.mine-menu-label {
+  display: block;
 }
 
 .mine-menu-switch-row {
@@ -3667,6 +3733,13 @@ html::-webkit-scrollbar-thumb:active,
   align-items: center;
   justify-content: flex-end;
   flex-shrink: 0;
+}
+
+@media (min-width: 641px) {
+  .mine-tab {
+    padding-top: 20px;
+    padding-bottom: 32px;
+  }
 }
 
 /* PC 表格设置侧弹框 */
@@ -5369,7 +5442,7 @@ html::-webkit-scrollbar-thumb:active,
     0 4px 12px rgba(0, 0, 0, 0.2);
 
   width: 68px;
-  height: 200px;
+  height: 266px;
   overflow: hidden;
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }

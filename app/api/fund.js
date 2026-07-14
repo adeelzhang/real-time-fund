@@ -2009,6 +2009,36 @@ export const fetchStockIntradayBatch = async (holdings = []) => {
   return result;
 };
 
+let localFundListPromise = null;
+
+const searchLocalFundList = async (query) => {
+  if (!localFundListPromise) {
+    localFundListPromise = fetch('/allFund.json', { cache: 'force-cache' })
+      .then((response) => {
+        if (!response.ok) throw new Error('本地基金库加载失败');
+        return response.json();
+      })
+      .then((items) => (isArray(items) ? items : []))
+      .catch((error) => {
+        localFundListPromise = null;
+        throw error;
+      });
+  }
+
+  const normalizedQuery = String(query).toLocaleLowerCase('zh-CN').replace(/\s+/g, '');
+  const items = await localFundListPromise;
+  return items
+    .filter((item) => {
+      const code = String(item?.code || '');
+      const name = String(item?.name || '')
+        .toLocaleLowerCase('zh-CN')
+        .replace(/\s+/g, '');
+      return code.includes(normalizedQuery) || name.includes(normalizedQuery);
+    })
+    .slice(0, 20)
+    .map((item) => ({ CODE: String(item.code), NAME: String(item.name), TYPE: '基金' }));
+};
+
 export const searchFunds = async (val) => {
   const normalized = String(val || '').trim();
   if (!normalized) return [];
@@ -2019,6 +2049,13 @@ export const searchFunds = async (val) => {
     return await qc.fetchQuery({
       queryKey: qk.fundSearch(normalized),
       queryFn: async () => {
+        try {
+          const localResults = await searchLocalFundList(normalized);
+          if (localResults.length > 0) return localResults;
+        } catch (error) {
+          console.warn('本地基金搜索失败，切换到远端搜索', error);
+        }
+
         const callbackName = `SuggestData_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
         const url = `https://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key=${encodeURIComponent(normalized)}&callback=${callbackName}&_=${Date.now()}`;
 
