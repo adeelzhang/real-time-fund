@@ -1,6 +1,6 @@
-import Image from 'next/image';
 import Link from 'next/link';
 import { INFO_LINKS } from '@/app/lib/site';
+import InfoNavigation from './_components/InfoNavigation';
 import './info.css';
 
 export default function InfoLayout({ children }) {
@@ -9,17 +9,7 @@ export default function InfoLayout({ children }) {
       <a className="info-skip-link" href="#main-content">
         跳到正文
       </a>
-      <header className="info-site-header">
-        <div className="info-site-header-inner">
-          <Link className="info-brand-link" href="/" aria-label="返回估基首页">
-            <Image src="/guji-icon-32-v2.png" alt="" aria-hidden width={32} height={32} unoptimized />
-            <span>估基</span>
-          </Link>
-          <Link className="info-home-link" href="/">
-            返回主站
-          </Link>
-        </div>
-      </header>
+      <InfoNavigation />
 
       {children}
 

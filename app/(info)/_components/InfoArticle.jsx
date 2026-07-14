@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { SITE_INFO_UPDATED_ISO, SITE_NAME, SITE_URL } from '@/app/lib/site';
 
 const UPDATED_LABEL = '2026年7月15日';
@@ -61,12 +60,6 @@ export default function InfoArticle({ label, title, description, path, schemaTyp
 
   return (
     <main id="main-content" className="info-main">
-      <nav className="info-breadcrumb" aria-label="面包屑">
-        <Link href="/">首页</Link>
-        <span aria-hidden>/</span>
-        <span aria-current="page">{label}</span>
-      </nav>
-
       <article className="info-article">
         <header className="info-article-header">
           <p className="info-kicker">{label}</p>

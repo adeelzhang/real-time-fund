@@ -367,6 +367,14 @@ export default function HomePage() {
   }, [isMobile, dynamicStyleMobile, dynamicStylePc]);
 
   const [mainTab, setMainTab] = useState('home');
+
+  useEffect(() => {
+    const restoreTab = sessionStorage.getItem('guji-restore-main-tab');
+    if (restoreTab === 'mine') {
+      sessionStorage.removeItem('guji-restore-main-tab');
+      setMainTab('mine');
+    }
+  }, []);
   const fundDetailStyle = customSettings?.fundDetailStyle === 'classic' ? 'classic' : 'manager';
   const gaussianBlurEnabled = customSettings?.gaussianBlurEnabled !== false;
 

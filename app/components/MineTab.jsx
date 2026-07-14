@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { AnimatePresence } from 'framer-motion';
 import { BookOpen, CalendarDays, ChevronRight, LogOut, RefreshCw, Settings, SquarePlus } from 'lucide-react';
 import { LoginIcon } from './Icons';
@@ -30,10 +31,10 @@ function MenuRow({ icon: Icon, label, description, onClick, disabled = false, da
   );
 }
 
-function LinkRow({ icon: Icon, label, description, href }) {
+function LinkRow({ icon: Icon, label, description, href, onNavigate }) {
   return (
     <li>
-      <a className="mine-menu-row glass mine-menu-link" href={href}>
+      <Link className="mine-menu-row glass mine-menu-link" href={href} onNavigate={onNavigate}>
         <span className="mine-menu-main">
           <Icon className="mine-menu-icon" aria-hidden />
           <span className="mine-menu-text">
@@ -42,7 +43,7 @@ function LinkRow({ icon: Icon, label, description, href }) {
           </span>
         </span>
         <ChevronRight className="mine-menu-chevron" aria-hidden strokeWidth={2} />
-      </a>
+      </Link>
     </li>
   );
 }
@@ -149,7 +150,13 @@ export default function MineTab({
           信息与支持
         </h2>
         <ul className="mine-menu-list" role="list">
-          <LinkRow icon={BookOpen} label="帮助与关于" description="使用帮助、数据说明、隐私与协议" href="/help" />
+          <LinkRow
+            icon={BookOpen}
+            label="帮助与关于"
+            description="使用帮助、数据说明、隐私与协议"
+            href="/help"
+            onNavigate={() => sessionStorage.setItem('guji-info-return', 'mine')}
+          />
         </ul>
       </section>
 
