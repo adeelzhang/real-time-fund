@@ -3,7 +3,19 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { AnimatePresence } from 'framer-motion';
-import { CalendarDays, ChevronRight, LogOut, RefreshCw, Settings, SquarePlus } from 'lucide-react';
+import {
+  BookOpen,
+  CalendarDays,
+  ChevronRight,
+  Database,
+  FileText,
+  Info,
+  LogOut,
+  RefreshCw,
+  Settings,
+  ShieldCheck,
+  SquarePlus
+} from 'lucide-react';
 import { LoginIcon } from './Icons';
 import ConfirmModal from './ConfirmModal';
 import { isStandaloneMode, openPwaInstallGuide } from '@/app/lib/pwaInstall';
@@ -26,6 +38,23 @@ function MenuRow({ icon: Icon, label, description, onClick, disabled = false, da
         </span>
         {trailing || <ChevronRight className="mine-menu-chevron" aria-hidden strokeWidth={2} />}
       </button>
+    </li>
+  );
+}
+
+function LinkRow({ icon: Icon, label, description, href }) {
+  return (
+    <li>
+      <a className="mine-menu-row glass mine-menu-link" href={href}>
+        <span className="mine-menu-main">
+          <Icon className="mine-menu-icon" aria-hidden />
+          <span className="mine-menu-text">
+            <span className="mine-menu-label">{label}</span>
+            {description ? <span className="mine-menu-description">{description}</span> : null}
+          </span>
+        </span>
+        <ChevronRight className="mine-menu-chevron" aria-hidden strokeWidth={2} />
+      </a>
     </li>
   );
 }
@@ -124,6 +153,19 @@ export default function MineTab({
             onClick={openPwaInstallGuide}
           />
           <MenuRow icon={Settings} label="设置" description="刷新、显示与数据管理" onClick={onOpenSettings} />
+        </ul>
+      </section>
+
+      <section className="mine-section" aria-labelledby="mine-info-title">
+        <h2 id="mine-info-title" className="mine-section-title">
+          信息与支持
+        </h2>
+        <ul className="mine-menu-list" role="list">
+          <LinkRow icon={BookOpen} label="使用帮助" description="常见问题与数据备份" href="/help" />
+          <LinkRow icon={Database} label="数据与计算" description="估值口径和数据更新时间" href="/methodology" />
+          <LinkRow icon={Info} label="关于估基" description="产品定位与使用边界" href="/about" />
+          <LinkRow icon={ShieldCheck} label="隐私政策" description="本地、云端与访问统计说明" href="/privacy" />
+          <LinkRow icon={FileText} label="用户协议" description="服务规则与风险边界" href="/terms" />
         </ul>
       </section>
 

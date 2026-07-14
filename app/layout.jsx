@@ -9,11 +9,7 @@ import ClientErrorBoundary from './components/ClientErrorBoundary';
 import GlobalClientErrorHandler from './components/GlobalClientErrorHandler';
 import { QueryClientProviderWrapper } from './providers/query-client-provider';
 import { TooltipProvider } from '@/components/ui/tooltip';
-
-const SITE_URL = 'https://www.myfunds.cc';
-const SITE_TITLE = '估基 - 实时基金估值与持仓管理';
-const SITE_DESCRIPTION =
-  '估基提供实时基金估值、日内走势、前十大重仓、持仓收益和全球行情查询，支持自选基金与多端数据同步。';
+import { SITE_DESCRIPTION, SITE_TITLE, SITE_URL } from './lib/site';
 const STRUCTURED_DATA = {
   '@context': 'https://schema.org',
   '@type': 'WebApplication',

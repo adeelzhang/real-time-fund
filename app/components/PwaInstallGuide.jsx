@@ -273,6 +273,8 @@ export default function PwaInstallGuide() {
     let timeoutId;
     let attempts = 0;
 
+    if (window.location.pathname !== '/') return undefined;
+
     const tryShow = () => {
       if (!shouldAutoShowPwaGuide()) return;
       if (hasBlockingPwaGuideUi()) {

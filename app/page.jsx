@@ -48,6 +48,7 @@ import MineTab from './components/MineTab';
 import MarketTab from './components/MarketTab';
 import GlobalMarketTab from './components/GlobalMarketTab';
 import PcSideNav from './components/PcSideNav';
+import { INFO_LINKS } from './lib/site';
 import { useTheme } from './hooks/useTheme';
 import { useTradingDay } from './hooks/useTradingDay';
 import { useHoldingProfit } from './hooks/useHoldingProfit';
@@ -5272,6 +5273,13 @@ export default function HomePage() {
                     数据源：实时估值与重仓直连东方财富，仅供个人学习及参考使用。数据可能存在延迟，不作为任何投资建议
                   </p>
                   <p style={{ marginBottom: 12 }}>注：估算数据与真实结算数据会有1%左右误差，非股票型基金误差较大</p>
+                  <nav className="site-info-links" aria-label="站点信息">
+                    {INFO_LINKS.map((item) => (
+                      <a key={item.href} href={item.href}>
+                        {item.label}
+                      </a>
+                    ))}
+                  </nav>
                 </>
               )}
             </div>

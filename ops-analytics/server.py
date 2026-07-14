@@ -165,6 +165,7 @@ def json_response(handler, data, status=HTTPStatus.OK, extra_headers=None):
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Cache-Control", "no-store")
+    handler.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
     handler.send_header("Access-Control-Allow-Origin", "*")
     handler.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password, Authorization, apikey")
     for key, value in (extra_headers or {}).items():
@@ -179,6 +180,7 @@ def text_response(handler, text, status=HTTPStatus.OK, content_type="text/html; 
     handler.send_response(status)
     handler.send_header("Content-Type", content_type)
     handler.send_header("Cache-Control", "no-store")
+    handler.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
     handler.send_header("X-Frame-Options", "DENY")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
@@ -189,6 +191,7 @@ def head_response(handler, status=HTTPStatus.OK, content_type="text/html; charse
     handler.send_response(status)
     handler.send_header("Content-Type", content_type)
     handler.send_header("Cache-Control", "no-store")
+    handler.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
     handler.send_header("X-Frame-Options", "DENY")
     handler.end_headers()
 
@@ -1395,12 +1398,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password, Authorization, apikey")
+        self.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
         self.end_headers()
 
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
             json_response(self, {"ok": True, "service": "guji-analytics"})
+            return
+        if parsed.path == "/robots.txt":
+            text_response(self, "User-agent: *\nDisallow: /\n", content_type="text/plain; charset=utf-8")
             return
         if parsed.path in {"/", "/ops", "/ops/"}:
             text_response(self, OPS_HTML)
@@ -1425,7 +1432,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_HEAD(self):
         parsed = urlparse(self.path)
-        if parsed.path in {"/", "/ops", "/ops/", "/health", "/api/analytics/stats"}:
+        if parsed.path in {"/", "/ops", "/ops/", "/health", "/robots.txt", "/api/analytics/stats"}:
             head_response(self)
             return
         head_response(self, HTTPStatus.NOT_FOUND, "application/json; charset=utf-8")

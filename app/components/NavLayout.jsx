@@ -20,7 +20,7 @@ export default function NavLayout({
   return (
     <>
       <PcSideNav value={mainTab} onChange={setMainTab} />
-      <div ref={containerRef} className={containerClassName} style={{ width: isMobile ? '100%' : containerWidth }}>
+      <main ref={containerRef} className={containerClassName} style={{ width: isMobile ? '100%' : containerWidth }}>
         <AnimatePresence>
           {showThemeTransition && (
             <motion.div
@@ -45,7 +45,7 @@ export default function NavLayout({
         {isMobile && (
           <MobileBottomNav value={mainTab} onChange={setMainTab} hidden={mobileBottomNavHidden && mainTab === 'home'} />
         )}
-      </div>
+      </main>
     </>
   );
 }

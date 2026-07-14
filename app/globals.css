@@ -215,6 +215,71 @@ body {
   position: relative;
 }
 
+.not-found-page {
+  width: min(100%, 560px);
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 72px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.not-found-page img {
+  border-radius: 8px;
+}
+
+.not-found-code {
+  margin: 28px 0 6px;
+  color: var(--primary);
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+.not-found-page h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 32px;
+  font-weight: 780;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+.not-found-page > p:not(.not-found-code) {
+  margin: 14px 0 24px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.7;
+  letter-spacing: 0;
+}
+
+.not-found-page a {
+  min-height: 44px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-decoration: none;
+}
+
+.not-found-page a:hover {
+  filter: brightness(1.06);
+}
+
+.not-found-page a:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ring) 60%, transparent);
+  outline-offset: 3px;
+}
+
 /* 渐变层固定为视口大小，随宽高变化自动重绘，保证任意尺寸下都连贯 */
 body::before {
   content: '';
@@ -1252,6 +1317,32 @@ input[type='number'] {
   color: var(--muted);
   text-align: center;
   padding-bottom: 60px;
+}
+
+.site-info-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 16px;
+}
+
+.site-info-links a {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-decoration: none;
+}
+
+.site-info-links a:hover,
+.site-info-links a:focus-visible {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .actions {
@@ -3682,6 +3773,21 @@ html::-webkit-scrollbar-thumb:active,
     background 0.2s ease;
   min-height: 48px;
   box-sizing: border-box;
+}
+
+.mine-menu-link {
+  text-decoration: none;
+}
+
+.mine-menu-row:hover,
+.mine-menu-row:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+}
+
+.mine-menu-row:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ring) 55%, transparent);
+  outline-offset: 2px;
 }
 
 .mine-menu-row:disabled {
