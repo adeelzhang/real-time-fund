@@ -3,19 +3,7 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { AnimatePresence } from 'framer-motion';
-import {
-  BookOpen,
-  CalendarDays,
-  ChevronRight,
-  Database,
-  FileText,
-  Info,
-  LogOut,
-  RefreshCw,
-  Settings,
-  ShieldCheck,
-  SquarePlus
-} from 'lucide-react';
+import { BookOpen, CalendarDays, ChevronRight, LogOut, RefreshCw, Settings, SquarePlus } from 'lucide-react';
 import { LoginIcon } from './Icons';
 import ConfirmModal from './ConfirmModal';
 import { isStandaloneMode, openPwaInstallGuide } from '@/app/lib/pwaInstall';
@@ -161,11 +149,7 @@ export default function MineTab({
           信息与支持
         </h2>
         <ul className="mine-menu-list" role="list">
-          <LinkRow icon={BookOpen} label="使用帮助" description="常见问题与数据备份" href="/help" />
-          <LinkRow icon={Database} label="数据与计算" description="估值口径和数据更新时间" href="/methodology" />
-          <LinkRow icon={Info} label="关于估基" description="产品定位与使用边界" href="/about" />
-          <LinkRow icon={ShieldCheck} label="隐私政策" description="本地、云端与访问统计说明" href="/privacy" />
-          <LinkRow icon={FileText} label="用户协议" description="服务规则与风险边界" href="/terms" />
+          <LinkRow icon={BookOpen} label="帮助与关于" description="使用帮助、数据说明、隐私与协议" href="/help" />
         </ul>
       </section>
 

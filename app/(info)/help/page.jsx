@@ -14,6 +14,17 @@ export const metadata = createInfoMetadata({
 export default function HelpPage() {
   return (
     <InfoArticle label="使用帮助" title={title} description={description} path="/help">
+      <nav className="info-hub-nav" aria-label="帮助与关于">
+        <p>帮助与关于</p>
+        <div>
+          <span aria-current="page">使用帮助</span>
+          <Link href="/methodology">数据与计算</Link>
+          <Link href="/about">关于估基</Link>
+          <Link href="/privacy">隐私政策</Link>
+          <Link href="/terms">用户协议</Link>
+        </div>
+      </nav>
+
       <InfoSection title="不登录可以使用吗？" id="use-without-login">
         <p>
           可以。未登录时，基金清单、分组、持仓和显示设置默认保存在当前浏览器中。清理浏览器数据、更换设备或使用无痕模式可能导致这些本地数据无法恢复，建议定期在设置中导出配置备份。

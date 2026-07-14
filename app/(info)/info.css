@@ -153,6 +153,62 @@
   letter-spacing: 0;
 }
 
+.info-hub-nav {
+  margin: 0 0 6px;
+  padding: 18px 0 22px;
+  border-top: 1px solid var(--border);
+}
+
+.info-hub-nav > p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+.info-hub-nav > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.info-hub-nav a,
+.info-hub-nav span {
+  min-height: 40px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: 0;
+  text-decoration: none;
+}
+
+.info-hub-nav span[aria-current='page'] {
+  border-color: color-mix(in srgb, var(--primary) 50%, var(--border));
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+}
+
+.info-hub-nav a:hover,
+.info-hub-nav a:focus-visible {
+  border-color: var(--primary);
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.info-hub-nav a:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ring) 55%, transparent);
+  outline-offset: 2px;
+}
+
 .info-section {
   padding: 30px 0;
   border-top: 1px solid var(--border);
