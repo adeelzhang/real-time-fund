@@ -3986,6 +3986,7 @@ html::-webkit-scrollbar-thumb:active,
 }
 
 .pwa-ios-visual-image-wrap {
+  position: relative;
   display: flex;
   width: 100%;
   min-height: 180px;
@@ -3996,7 +3997,21 @@ html::-webkit-scrollbar-thumb:active,
   overflow: hidden;
 }
 
-.pwa-ios-visual-image-wrap img {
+.pwa-ios-visual-slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.pwa-ios-visual-slide:active {
+  cursor: grabbing;
+}
+
+.pwa-ios-visual-slide img {
   width: auto;
   max-width: 100%;
   height: 100%;
@@ -4005,6 +4020,9 @@ html::-webkit-scrollbar-thumb:active,
   border-radius: 8px;
   object-fit: contain;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .pwa-ios-visual-description {

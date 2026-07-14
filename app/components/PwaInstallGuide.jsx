@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   ArrowLeft,
   Check,
@@ -35,6 +36,8 @@ import {
 const AUTO_SHOW_DELAY_MS = 2500;
 const IDLE_RETRY_MS = 1000;
 const MAX_IDLE_RETRIES = 30;
+const VISUAL_SWIPE_OFFSET = 52;
+const VISUAL_SWIPE_VELOCITY = 520;
 
 const IOS_VISUAL_GUIDE = [
   {
@@ -51,6 +54,14 @@ const IOS_VISUAL_GUIDE = [
     image: '/pwa-guide/ios-step-3.webp',
     title: '确认添加',
     description: '确认名称为“估基”，再点击右上角的“添加”。'
+  }
+];
+
+const WECHAT_IOS_VISUAL_GUIDE = [
+  {
+    image: '/pwa-guide/wechat-open-safari.webp',
+    title: '从微信打开 Safari',
+    description: '点击微信右上角的“…”按钮，再选择“在 Safari 中打开”。'
   }
 ];
 
@@ -71,6 +82,7 @@ function Step({ number, icon: Icon, children }) {
 function getGuideVariant(environment, promptReady) {
   if (environment.isAndroid && promptReady && !environment.isInApp) return 'android-native';
   if (environment.isIOS && environment.isSafari) return 'ios-safari';
+  if (environment.isIOS && environment.isWeChat) return 'ios-wechat';
   if (environment.isInApp) return 'in-app';
   if (environment.isIOS) return 'ios-browser';
   return 'android-manual';
@@ -84,9 +96,12 @@ export default function PwaInstallGuide() {
   const [source, setSource] = useState('auto');
   const [visualGuideOpen, setVisualGuideOpen] = useState(false);
   const [visualGuideStep, setVisualGuideStep] = useState(0);
+  const [visualGuideDirection, setVisualGuideDirection] = useState(1);
   const deferredPromptRef = useRef(null);
+  const reduceMotion = useReducedMotion();
 
   const variant = useMemo(() => getGuideVariant(environment, promptReady), [environment, promptReady]);
+  const visualGuideItems = variant === 'ios-wechat' ? WECHAT_IOS_VISUAL_GUIDE : IOS_VISUAL_GUIDE;
 
   const closeWithoutDismiss = useCallback(() => {
     setOpen(false);
@@ -97,6 +112,7 @@ export default function PwaInstallGuide() {
     setSource(nextSource);
     setVisualGuideOpen(false);
     setVisualGuideStep(0);
+    setVisualGuideDirection(1);
     setOpen(true);
     sendAnalytics('pwa_guide_shown');
   }, []);
@@ -161,6 +177,7 @@ export default function PwaInstallGuide() {
 
   const handleVisualGuideOpen = useCallback(() => {
     setVisualGuideStep(0);
+    setVisualGuideDirection(1);
     setVisualGuideOpen(true);
     sendAnalytics('pwa_ios_visual_guide_opened');
   }, []);
@@ -168,8 +185,32 @@ export default function PwaInstallGuide() {
   const handleVisualGuideComplete = useCallback(() => {
     setVisualGuideOpen(false);
     setVisualGuideStep(0);
+    setVisualGuideDirection(1);
     sendAnalytics('pwa_ios_visual_guide_done');
   }, []);
+
+  const goToVisualGuideStep = useCallback(
+    (nextStep) => {
+      const clampedStep = Math.max(0, Math.min(visualGuideItems.length - 1, nextStep));
+      if (clampedStep === visualGuideStep) return;
+      setVisualGuideDirection(clampedStep > visualGuideStep ? 1 : -1);
+      setVisualGuideStep(clampedStep);
+    },
+    [visualGuideItems.length, visualGuideStep]
+  );
+
+  const handleVisualGuideSwipe = useCallback(
+    (_event, info) => {
+      if (info.offset.x <= -VISUAL_SWIPE_OFFSET || info.velocity.x <= -VISUAL_SWIPE_VELOCITY) {
+        goToVisualGuideStep(visualGuideStep + 1);
+        return;
+      }
+      if (info.offset.x >= VISUAL_SWIPE_OFFSET || info.velocity.x >= VISUAL_SWIPE_VELOCITY) {
+        goToVisualGuideStep(visualGuideStep - 1);
+      }
+    },
+    [goToVisualGuideStep, visualGuideStep]
+  );
 
   const handleOpenChange = useCallback(
     (nextOpen) => {
@@ -266,6 +307,16 @@ export default function PwaInstallGuide() {
         [Check, '确认名称后，点击右上角“添加”']
       ]
     },
+    'ios-wechat': {
+      badge: 'iOS · 微信',
+      title: '建议添加桌面快捷方式',
+      description: '先从微信使用 Safari 打开，再将估基添加到主屏幕。',
+      steps: [
+        [MoreHorizontal, '点击微信页面右上角的“…”按钮'],
+        [Compass, '在菜单中选择“在 Safari 中打开”'],
+        [SquarePlus, '进入 Safari 后，继续添加到主屏幕']
+      ]
+    },
     'ios-browser': {
       badge: 'iOS · 其他浏览器',
       title: '请先使用 Safari 打开',
@@ -298,13 +349,17 @@ export default function PwaInstallGuide() {
     }
   }[variant];
 
-  const needsBrowserTransfer = variant === 'ios-browser' || variant === 'in-app';
-  const currentVisualStep = IOS_VISUAL_GUIDE[visualGuideStep];
+  const needsBrowserTransfer = variant === 'ios-browser' || variant === 'ios-wechat' || variant === 'in-app';
+  const currentVisualStep = visualGuideItems[visualGuideStep];
+  const hasVisualGuide = variant === 'ios-safari' || variant === 'ios-wechat';
+  const visualEntryTitle = variant === 'ios-wechat' ? '查看微信打开 Safari 图示' : '查看图片指引';
+  const visualEntryDescription =
+    variant === 'ios-wechat' ? '红框标出微信右上角和 Safari 入口' : '红框标出每一步要点的位置';
   const defaultHeight = visualGuideOpen
     ? '86vh'
     : variant === 'android-native'
       ? '56vh'
-      : variant === 'ios-safari'
+      : variant === 'ios-safari' || variant === 'ios-wechat'
         ? '78vh'
         : '68vh';
 
@@ -330,7 +385,7 @@ export default function PwaInstallGuide() {
                 </button>
                 <div className="pwa-install-heading-copy">
                   <span className="pwa-install-platform">
-                    图片指引 · 第 {visualGuideStep + 1} / {IOS_VISUAL_GUIDE.length} 步
+                    图片指引 · 第 {visualGuideStep + 1} / {visualGuideItems.length} 步
                   </span>
                   <DrawerTitle>{currentVisualStep.title}</DrawerTitle>
                 </div>
@@ -339,24 +394,47 @@ export default function PwaInstallGuide() {
 
             <div className="pwa-ios-visual-guide">
               <div className="pwa-ios-visual-image-wrap">
-                <Image
-                  src={currentVisualStep.image}
-                  alt={`iOS 添加到主屏幕第 ${visualGuideStep + 1} 步：${currentVisualStep.description}`}
-                  width={720}
-                  height={960}
-                  sizes="(max-width: 640px) calc(100vw - 40px), 420px"
-                  priority={visualGuideStep === 0}
-                />
+                <AnimatePresence initial={false} custom={visualGuideDirection} mode="popLayout">
+                  <motion.div
+                    key={currentVisualStep.image}
+                    className="pwa-ios-visual-slide"
+                    custom={visualGuideDirection}
+                    variants={{
+                      enter: (direction) => ({ x: reduceMotion ? 0 : direction * 72, opacity: reduceMotion ? 1 : 0 }),
+                      center: { x: 0, opacity: 1 },
+                      exit: (direction) => ({ x: reduceMotion ? 0 : direction * -72, opacity: reduceMotion ? 1 : 0 })
+                    }}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
+                    transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }}
+                    drag="x"
+                    dragConstraints={{ left: 0, right: 0 }}
+                    dragElastic={0.18}
+                    dragDirectionLock
+                    onDragEnd={handleVisualGuideSwipe}
+                  >
+                    <Image
+                      src={currentVisualStep.image}
+                      alt={`移动端操作图第 ${visualGuideStep + 1} 步：${currentVisualStep.description}`}
+                      width={720}
+                      height={960}
+                      sizes="(max-width: 640px) calc(100vw - 40px), 420px"
+                      priority={visualGuideStep === 0}
+                      draggable={false}
+                    />
+                  </motion.div>
+                </AnimatePresence>
               </div>
               <p className="pwa-ios-visual-description">{currentVisualStep.description}</p>
 
               <div className="pwa-ios-visual-dots" aria-label="图片步骤">
-                {IOS_VISUAL_GUIDE.map((step, index) => (
+                {visualGuideItems.map((step, index) => (
                   <button
                     key={step.image}
                     type="button"
                     className={index === visualGuideStep ? 'active' : ''}
-                    onClick={() => setVisualGuideStep(index)}
+                    onClick={() => goToVisualGuideStep(index)}
                     aria-label={`查看第 ${index + 1} 步`}
                     aria-current={index === visualGuideStep ? 'step' : undefined}
                   >
@@ -369,18 +447,14 @@ export default function PwaInstallGuide() {
                 <button
                   type="button"
                   className="button secondary"
-                  onClick={() => setVisualGuideStep((current) => Math.max(0, current - 1))}
+                  onClick={() => goToVisualGuideStep(visualGuideStep - 1)}
                   disabled={visualGuideStep === 0}
                 >
                   <ChevronLeft aria-hidden />
                   上一步
                 </button>
-                {visualGuideStep < IOS_VISUAL_GUIDE.length - 1 ? (
-                  <button
-                    type="button"
-                    className="button"
-                    onClick={() => setVisualGuideStep((current) => Math.min(IOS_VISUAL_GUIDE.length - 1, current + 1))}
-                  >
+                {visualGuideStep < visualGuideItems.length - 1 ? (
+                  <button type="button" className="button" onClick={() => goToVisualGuideStep(visualGuideStep + 1)}>
                     下一步
                     <ChevronRight aria-hidden />
                   </button>
@@ -425,14 +499,14 @@ export default function PwaInstallGuide() {
                 ))}
               </ol>
 
-              {variant === 'ios-safari' ? (
+              {hasVisualGuide ? (
                 <button type="button" className="pwa-install-visual-entry" onClick={handleVisualGuideOpen}>
                   <span className="pwa-install-visual-entry-icon" aria-hidden>
                     <Images />
                   </span>
                   <span className="pwa-install-visual-entry-copy">
-                    <strong>查看图片指引</strong>
-                    <small>红框标出每一步要点的位置</small>
+                    <strong>{visualEntryTitle}</strong>
+                    <small>{visualEntryDescription}</small>
                   </span>
                   <ChevronRight aria-hidden />
                 </button>

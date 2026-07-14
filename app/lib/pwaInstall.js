@@ -22,7 +22,15 @@ export function isStandaloneMode() {
 
 export function detectPwaEnvironment() {
   if (typeof window === 'undefined') {
-    return { isMobile: false, isIOS: false, isAndroid: false, isSafari: false, isInApp: false, browser: 'other' };
+    return {
+      isMobile: false,
+      isIOS: false,
+      isAndroid: false,
+      isSafari: false,
+      isInApp: false,
+      isWeChat: false,
+      browser: 'other'
+    };
   }
 
   const ua = window.navigator.userAgent || '';
@@ -30,6 +38,7 @@ export function detectPwaEnvironment() {
   const isIPadDesktopMode = platform === 'MacIntel' && window.navigator.maxTouchPoints > 1;
   const isIOS = /iPad|iPhone|iPod/i.test(ua) || isIPadDesktopMode;
   const isAndroid = /Android/i.test(ua);
+  const isWeChat = /MicroMessenger/i.test(ua);
   const isInApp =
     /MicroMessenger|Weibo|AlipayClient|DingTalk|Feishu|Lark|ByteLocale|Toutiao|Aweme|FBAN|FBAV|Instagram|Line\//i.test(
       ua
@@ -62,6 +71,7 @@ export function detectPwaEnvironment() {
     isAndroid,
     isSafari,
     isInApp,
+    isWeChat,
     browser
   };
 }

@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'guji-static-';
-const CACHE_NAME = `${CACHE_PREFIX}v5`;
+const CACHE_NAME = `${CACHE_PREFIX}v6`;
 const OFFLINE_URL = '/offline.html';
 const APP_SHELL = [
   '/',
@@ -12,7 +12,8 @@ const APP_SHELL = [
   '/guji-icon-512-maskable-v2.png',
   '/pwa-guide/ios-step-1.webp',
   '/pwa-guide/ios-step-2.webp',
-  '/pwa-guide/ios-step-3.webp'
+  '/pwa-guide/ios-step-3.webp',
+  '/pwa-guide/wechat-open-safari.webp'
 ];
 
 async function precacheAppShell() {
