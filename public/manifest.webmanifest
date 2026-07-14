@@ -1,7 +1,8 @@
 {
   "name": "估基",
   "short_name": "估基",
-  "description": "基金估值与持仓管理工具",
+  "description": "实时基金估值、日内走势、持仓收益与全球行情管理工具",
+  "lang": "zh-CN",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",

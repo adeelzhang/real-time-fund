@@ -728,6 +728,13 @@ body::before {
   transition: flex 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.brand-title {
+  margin: 0;
+  font: inherit;
+  font-weight: inherit;
+  letter-spacing: 0;
+}
+
 .brand.search-focused-sibling {
   flex: 0 0 auto;
 }
