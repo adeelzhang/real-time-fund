@@ -3757,6 +3757,210 @@ html::-webkit-scrollbar-thumb:active,
   flex-shrink: 0;
 }
 
+/* 添加到主屏幕：移动端平台引导底部面板。 */
+.pwa-install-drawer {
+  overflow: hidden;
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+}
+
+.pwa-install-header {
+  gap: 12px;
+  padding: 12px 20px 16px;
+  text-align: left !important;
+}
+
+.pwa-install-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.pwa-install-app-icon {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.pwa-install-heading-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pwa-install-heading-copy [data-slot='drawer-title'] {
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.pwa-install-platform {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 5px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.pwa-install-platform svg {
+  width: 14px;
+  height: 14px;
+}
+
+.pwa-install-header [data-slot='drawer-description'] {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pwa-install-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 18px 20px max(18px, env(safe-area-inset-bottom, 0px));
+  overscroll-behavior: contain;
+}
+
+.pwa-install-steps {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  gap: 10px;
+  list-style: none;
+}
+
+.pwa-install-step {
+  display: grid;
+  min-height: 48px;
+  grid-template-columns: 24px 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.pwa-install-step-number {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: center;
+}
+
+.pwa-install-step-icon {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  color: var(--primary);
+}
+
+.pwa-install-step-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.pwa-install-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(92px, 0.8fr);
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 20px;
+}
+
+.pwa-install-primary,
+.pwa-install-secondary {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 15px;
+  line-height: 1.2;
+  touch-action: manipulation;
+}
+
+.pwa-install-primary svg {
+  width: 18px;
+  height: 18px;
+}
+
+.pwa-install-text-actions {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding-top: 4px;
+}
+
+.pwa-install-text-actions button {
+  min-height: 44px;
+  padding: 8px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  touch-action: manipulation;
+}
+
+.pwa-install-text-actions button:hover {
+  color: var(--text);
+}
+
+.pwa-install-reminder-note {
+  margin: -2px 0 0;
+  color: color-mix(in srgb, var(--muted) 80%, transparent);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+@media (max-height: 650px) {
+  .pwa-install-header {
+    gap: 8px;
+    padding-bottom: 10px;
+  }
+
+  .pwa-install-body {
+    padding-top: 10px;
+  }
+
+  .pwa-install-step {
+    min-height: 42px;
+  }
+
+  .pwa-install-actions {
+    padding-top: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pwa-install-drawer,
+  .pwa-install-primary,
+  .pwa-install-secondary {
+    transition: none !important;
+  }
+}
+
 @media (min-width: 641px) {
   .mine-tab {
     padding-top: 20px;

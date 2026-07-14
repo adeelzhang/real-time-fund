@@ -2,6 +2,7 @@ import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
 import KeepScreenAwake from './components/KeepScreenAwake';
 import PwaRegister from './components/PwaRegister';
+import PwaInstallGuide from './components/PwaInstallGuide';
 import ThemeColorSync from './components/ThemeColorSync';
 import SelfAnalytics from './components/SelfAnalytics';
 import ClientErrorBoundary from './components/ClientErrorBoundary';
@@ -28,7 +29,7 @@ export default function RootLayout({ children }) {
         <link rel="icon" type="image/png" sizes="192x192" href="/guji-icon-192-v2.png" />
         <link rel="apple-touch-icon" href="/guji-icon-180-v2.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/guji-icon-180-v2.png" />
-        <link rel="manifest" href="/manifest.webmanifest?v=20260710" />
+        <link rel="manifest" href="/manifest.webmanifest?v=20260714" />
         {/* 初始为暗色；ThemeColorSync 会按 data-theme 同步为亮/暗 */}
         <meta name="theme-color" content="#0f172a" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -43,6 +44,7 @@ export default function RootLayout({ children }) {
         <ThemeColorSync />
         <KeepScreenAwake />
         <PwaRegister />
+        <PwaInstallGuide />
         <SelfAnalytics />
         <QueryClientProviderWrapper>
           <TooltipProvider>

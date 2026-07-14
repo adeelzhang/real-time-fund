@@ -679,7 +679,20 @@ def record_event(handler):
         return
 
     event_type = sanitize(payload.get("eventType") or "pageview", 32)
-    if event_type not in {"pageview", "heartbeat"}:
+    if event_type not in {
+        "pageview",
+        "heartbeat",
+        "pwa_guide_shown",
+        "pwa_guide_dismissed",
+        "pwa_guide_suppressed",
+        "pwa_install_cta_clicked",
+        "pwa_prompt_accepted",
+        "pwa_prompt_dismissed",
+        "pwa_app_installed",
+        "pwa_standalone_launch",
+        "pwa_marked_installed",
+        "pwa_copy_url_clicked",
+    }:
         event_type = "pageview"
 
     visitor_id = sanitize(payload.get("visitorId"), 128)

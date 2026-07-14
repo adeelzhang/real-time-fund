@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { AnimatePresence } from 'framer-motion';
-import { CalendarDays, ChevronRight, LogOut, RefreshCw, Settings } from 'lucide-react';
+import { CalendarDays, ChevronRight, LogOut, RefreshCw, Settings, SquarePlus } from 'lucide-react';
 import { LoginIcon } from './Icons';
 import ConfirmModal from './ConfirmModal';
+import { isStandaloneMode, openPwaInstallGuide } from '@/app/lib/pwaInstall';
 
 function MenuRow({ icon: Icon, label, description, onClick, disabled = false, danger = false, trailing }) {
   return (
@@ -42,6 +43,11 @@ export default function MineTab({
   onOpenSettings
 }) {
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  useEffect(() => {
+    setIsStandalone(isStandaloneMode());
+  }, []);
   const syncDescription = user
     ? isSyncing
       ? '正在同步持仓与设置'
@@ -110,6 +116,12 @@ export default function MineTab({
             description={syncDescription}
             onClick={user ? onSync : onLogin}
             disabled={isSyncing}
+          />
+          <MenuRow
+            icon={SquarePlus}
+            label="添加到主屏幕"
+            description={isStandalone ? '当前已从主屏幕打开' : '在手机桌面快捷打开估基'}
+            onClick={openPwaInstallGuide}
           />
           <MenuRow icon={Settings} label="设置" description="刷新、显示与数据管理" onClick={onOpenSettings} />
         </ul>

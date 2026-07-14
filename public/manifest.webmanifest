@@ -2,7 +2,7 @@
   "name": "估基",
   "short_name": "估基",
   "description": "基金估值与持仓管理工具",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
@@ -20,7 +20,13 @@
       "src": "/guji-icon-512-v2.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/guji-icon-512-maskable-v2.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "categories": ["finance", "utilities"],

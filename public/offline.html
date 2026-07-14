@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>估基 · 网络不可用</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #0f172a;
+        color: #f8fafc;
+      }
+      body {
+        min-height: 100dvh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      main {
+        width: min(100%, 360px);
+        text-align: center;
+      }
+      img {
+        width: 72px;
+        height: 72px;
+        border-radius: 8px;
+      }
+      h1 {
+        margin: 20px 0 8px;
+        font-size: 20px;
+        letter-spacing: 0;
+      }
+      p {
+        margin: 0;
+        color: #94a3b8;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      button {
+        min-width: 136px;
+        min-height: 48px;
+        margin-top: 24px;
+        border: 0;
+        border-radius: 8px;
+        background: #0891b2;
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/guji-icon-180-v2.png" alt="估基" width="72" height="72" />
+      <h1>网络暂时不可用</h1>
+      <p>请检查手机网络后重试。持仓和行情请求不会被离线缓存。</p>
+      <button type="button" onclick="location.reload()">重新加载</button>
+    </main>
+  </body>
+</html>

@@ -36,7 +36,7 @@ function getSessionId() {
   return next;
 }
 
-function sendAnalytics(eventType) {
+export function sendAnalytics(eventType) {
   try {
     const payload = {
       eventType,
