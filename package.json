@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test:sync": "node --no-warnings --test app/lib/syncState.test.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "prepare": "husky"

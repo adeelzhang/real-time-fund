@@ -27,6 +27,15 @@ import {
   toTz
 } from '../lib/fundHelpers';
 import { calculateYtdReturnRate, mergeAllScopedDailyEarnings, mergeAllHoldings } from '../lib/dailyEarnings';
+import {
+  LOCAL_DATA_TOUCHED_KEY,
+  LOCAL_FUNDS_TOUCHED_KEY,
+  LOCAL_UPDATED_AT_KEY,
+  getEffectiveLocalTimestampMs,
+  hasMeaningfulSyncPayload,
+  parseSyncTimestampMs,
+  shouldPreferCloudFundData
+} from '../lib/syncState';
 
 export const normalizeFundDailyEarningsScoped = (source) => {
   if (!isPlainObject(source)) return {};
@@ -38,16 +47,8 @@ export const normalizeFundDailyEarningsScoped = (source) => {
   return source;
 };
 
-const LOCAL_UPDATED_AT_KEY = 'localUpdatedAt';
-
-const parseTimestampMs = (value) => {
-  if (!value) return 0;
-  const ms = new Date(value).getTime();
-  return Number.isFinite(ms) ? ms : 0;
-};
-
 const latestTimestampIso = (...values) => {
-  const latestMs = values.reduce((max, value) => Math.max(max, parseTimestampMs(value)), 0);
+  const latestMs = values.reduce((max, value) => Math.max(max, parseSyncTimestampMs(value)), 0);
   return latestMs > 0 ? new Date(latestMs).toISOString() : null;
 };
 
@@ -60,6 +61,26 @@ const hasCloudPayload = (value) => {
     return true;
   });
 };
+
+const readLocalSyncPresencePayload = () => ({
+  funds: storageStore.getItem('funds', []),
+  tags: storageStore.getItem('tags', []),
+  favorites: storageStore.getItem('favorites', []),
+  groups: storageStore.getItem('groups', []),
+  collapsedCodes: storageStore.getItem('collapsedCodes', []),
+  collapsedTrends: storageStore.getItem('collapsedTrends', []),
+  collapsedValuationTrends: storageStore.getItem('collapsedValuationTrends', []),
+  collapsedEarnings: storageStore.getItem('collapsedEarnings', []),
+  refreshMs: storageStore.getItem('refreshMs', 30000),
+  holdings: storageStore.getItem('holdings', {}),
+  groupHoldings: storageStore.getItem('groupHoldings', {}),
+  pendingTrades: storageStore.getItem('pendingTrades', []),
+  transactions: storageStore.getItem('transactions', {}),
+  dcaPlans: storageStore.getItem('dcaPlans', {}),
+  customSettings: storageStore.getItem('customSettings', {}),
+  fundDailyEarnings: storageStore.getItem('fundDailyEarnings', {}),
+  fundDividends: storageStore.getItem('fundDividends', {})
+});
 
 const mergeValuationFieldsByGztime = (localFund, cloudFund) => {
   if (!isPlainObject(cloudFund)) return cloudFund;
@@ -105,6 +126,15 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
   const deviceConflictModalOpenRef = useRef(false);
   const dirtyKeysRef = useRef(new Set());
   const syncUserConfigRef = useRef(null);
+  const localInitializationRef = useRef(true);
+  const localInitializationResolveRef = useRef(null);
+  const localInitializationPromiseRef = useRef(null);
+
+  if (!localInitializationPromiseRef.current) {
+    localInitializationPromiseRef.current = new Promise((resolve) => {
+      localInitializationResolveRef.current = resolve;
+    });
+  }
 
   // deviceId init
   useEffect(() => {
@@ -153,6 +183,36 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
     storageStore.setItem(LOCAL_UPDATED_AT_KEY, timestamp);
     setLastSyncTime(timestamp);
     return timestamp;
+  }, []);
+
+  const markLocalDataTouched = useCallback(() => {
+    storageStore.setItem(LOCAL_DATA_TOUCHED_KEY, 'true');
+  }, []);
+
+  const markLocalFundsTouched = useCallback(() => {
+    storageStore.setItem(LOCAL_FUNDS_TOUCHED_KEY, 'true');
+  }, []);
+
+  const completeLocalInitialization = useCallback(() => {
+    if (!localInitializationRef.current) return;
+
+    try {
+      const locallyTouched = storageStore.getItem(LOCAL_DATA_TOUCHED_KEY, false) === true;
+      if (!locallyTouched && !hasMeaningfulSyncPayload(readLocalSyncPresencePayload())) {
+        window.localStorage.removeItem(LOCAL_UPDATED_AT_KEY);
+        setLastSyncTime(null);
+      }
+    } catch {
+      // 初始化状态检查失败时保持时间戳不变，由登录比较的空数据保护继续兜底。
+    }
+
+    localInitializationRef.current = false;
+    localInitializationResolveRef.current?.();
+  }, []);
+
+  const waitForLocalInitialization = useCallback(async () => {
+    if (!localInitializationRef.current) return;
+    await localInitializationPromiseRef.current;
   }, []);
 
   // --- getComparablePayload ---
@@ -727,6 +787,7 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
   // 通过 syncUserConfigRef 间接调用 syncUserConfig，避免空依赖导致的闭包陷阱
   const scheduleSync = useCallback(() => {
     if (!userIdRef.current) return;
+    if (localInitializationRef.current) return;
     if (skipSyncRef.current) return;
     if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
     syncDebounceRef.current = setTimeout(() => {
@@ -762,8 +823,24 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
         return;
       }
       try {
-        setIsSyncing(true);
         const baseData = payload || collectLocalPayload();
+        const locallyTouched = storageStore.getItem(LOCAL_DATA_TOUCHED_KEY, false) === true;
+        const localFundsTouched = storageStore.getItem(LOCAL_FUNDS_TOUCHED_KEY, false) === true;
+        if (!locallyTouched && !hasMeaningfulSyncPayload(baseData)) {
+          if (showTip) showToast('本地暂无需要同步的数据');
+          return;
+        }
+        if (
+          !isPartial &&
+          !localFundsTouched &&
+          (!isArray(baseData.funds) || baseData.funds.length === 0) &&
+          options?.allowFundlessOverwrite !== true
+        ) {
+          if (showTip) showToast('本机没有基金数据，已停止空数据覆盖');
+          return;
+        }
+
+        setIsSyncing(true);
         const now = nowInTz().toISOString();
         let deviceId = deviceIdRef.current || '';
         if (!deviceId) {
@@ -914,20 +991,25 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
       if (key === '__clear__') {
         return;
       }
+      if (localInitializationRef.current || skipSyncRef.current) {
+        return;
+      }
       dirtyKeysRef.current.add(key);
 
       if (key === 'fundValuationTimeseries') {
         return;
       }
 
-      if (!skipSyncRef.current) {
-        markLocalUpdated();
+      markLocalDataTouched();
+      if (key === 'funds') {
+        markLocalFundsTouched();
       }
+      markLocalUpdated();
       scheduleSync();
     };
 
     setOnSync(triggerSync);
-  }, [markLocalUpdated, setOnSync, scheduleSync]);
+  }, [markLocalDataTouched, markLocalFundsTouched, markLocalUpdated, setOnSync, scheduleSync]);
 
   // --- cross-tab storage listener ---
   useEffect(() => {
@@ -956,6 +1038,7 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
         setLastSyncTime(e.newValue);
       }
       if (!keys.has(e.key)) return;
+      if (localInitializationRef.current) return;
 
       import('../stores/storageStore').then(({ getFundCodesSignature, getTagsStoreSignature }) => {
         if (e.key === 'funds') {
@@ -982,13 +1065,13 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
   // --- triggerCustomSettingsSync ---
   const triggerCustomSettingsSync = useCallback(() => {
     queueMicrotask(() => {
+      if (localInitializationRef.current || skipSyncRef.current) return;
       dirtyKeysRef.current.add('customSettings');
-      if (!skipSyncRef.current) {
-        markLocalUpdated();
-      }
+      markLocalDataTouched();
+      markLocalUpdated();
       scheduleSync();
     });
-  }, [markLocalUpdated, scheduleSync]);
+  }, [markLocalDataTouched, markLocalUpdated, scheduleSync]);
 
   // --- applyCloudConfig ---
   const applyCloudConfig = useCallback(
@@ -1331,6 +1414,7 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
     async (userId, _checkConflict = false, options = {}) => {
       if (!userId) return;
       try {
+        await waitForLocalInitialization();
         useModalStore.setState({ cloudConfigModal: { open: false, userId: null, type: null, cloudData: null } });
         const { data: meta, error: metaError } = await withRetry(() =>
           supabase.from('user_configs').select('id, data, updated_at').eq('user_id', userId).maybeSingle()
@@ -1338,8 +1422,13 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
 
         if (metaError) throw metaError;
 
-        const pushLocalToCloud = async () => {
-          await syncUserConfig(userId, false, null, false, { forceTakeover: true });
+        const localPayload = collectLocalPayload();
+        const locallyTouched = storageStore.getItem(LOCAL_DATA_TOUCHED_KEY, false) === true;
+        const localFundsTouched = storageStore.getItem(LOCAL_FUNDS_TOUCHED_KEY, false) === true;
+        const localCanOverrideCloud = locallyTouched || hasMeaningfulSyncPayload(localPayload);
+
+        const pushLocalToCloud = async (pushOptions = {}) => {
+          await syncUserConfig(userId, false, null, false, { forceTakeover: true, ...pushOptions });
         };
 
         if (!meta?.id) {
@@ -1347,7 +1436,9 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
             supabase.from('user_configs').insert({ user_id: userId })
           );
           if (insertError) throw insertError;
-          await pushLocalToCloud();
+          if (localCanOverrideCloud) {
+            await pushLocalToCloud({ allowFundlessOverwrite: true });
+          }
           return;
         }
 
@@ -1355,13 +1446,25 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
         const cloudUpdatedAt = latestTimestampIso(meta.updated_at, cloudData?._syncMeta?.at) || meta.updated_at;
 
         if (!hasCloudPayload(cloudData)) {
-          await pushLocalToCloud();
+          if (localCanOverrideCloud) {
+            await pushLocalToCloud({ allowFundlessOverwrite: true });
+          }
+          return;
+        }
+
+        if (shouldPreferCloudFundData(localPayload, cloudData, localFundsTouched)) {
+          await applyCloudConfig(cloudData, cloudUpdatedAt, { ...options, userId });
+          return;
+        }
+
+        if (!localCanOverrideCloud) {
+          await applyCloudConfig(cloudData, cloudUpdatedAt, { ...options, userId });
           return;
         }
 
         const localUpdatedAt = storageStore.getItem(LOCAL_UPDATED_AT_KEY);
-        const localMs = parseTimestampMs(localUpdatedAt);
-        const cloudMs = parseTimestampMs(cloudUpdatedAt);
+        const localMs = getEffectiveLocalTimestampMs(localPayload, localUpdatedAt, locallyTouched);
+        const cloudMs = parseSyncTimestampMs(cloudUpdatedAt);
 
         if (localMs > cloudMs) {
           await pushLocalToCloud();
@@ -1389,7 +1492,7 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
         skipSyncRef.current = false;
       }
     },
-    [applyCloudConfig, markLocalUpdated, syncUserConfig]
+    [applyCloudConfig, markLocalUpdated, syncUserConfig, waitForLocalInitialization]
   );
 
   // --- handleSyncLocalConfig ---
@@ -1409,6 +1512,7 @@ export function useSyncManager({ showToast, refreshAllRef, setTempSeconds, setFu
     applyCloudConfig,
     handleSyncLocalConfig,
     triggerCustomSettingsSync,
+    completeLocalInitialization,
     skipSyncRef,
     deviceConflictModalOpenRef,
     storageHelper

@@ -2109,6 +2109,7 @@ export default function HomePage() {
     applyCloudConfig,
     handleSyncLocalConfig,
     triggerCustomSettingsSync,
+    completeLocalInitialization,
     skipSyncRef,
     deviceConflictModalOpenRef,
     storageHelper
@@ -2740,6 +2741,7 @@ export default function HomePage() {
           setTheme(savedTheme);
         }
       } catch {}
+      completeLocalInitialization();
       if (!cancelled) {
         hasLocalTabInitRef.current = true;
       }

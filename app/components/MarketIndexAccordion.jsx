@@ -9,7 +9,7 @@ import { ChevronRightIcon } from 'lucide-react';
 import { SettingsIcon } from './Icons';
 import { cn } from '@/lib/utils';
 import MarketSettingModal from './MarketSettingModal';
-import { storageStore } from '../stores';
+import { storageStore, useStorageStore } from '../stores';
 
 /** 迷你走势：只展示当日分时数据，不支持时不展示 */
 function MiniTrendLine({ changePercent, code, className }) {
@@ -168,6 +168,7 @@ const DEFAULT_SELECTED_CODES = ['sh000001', 'sz399001', 'sz399006'];
 
 export default function MarketIndexAccordion({ navbarHeight = 0, onCustomSettingsChange, refreshing = false }) {
   const isMobile = useIsMobile();
+  const customSettings = useStorageStore((state) => state.customSettings);
   const [indices, setIndices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openValue, setOpenValue] = useState('');
@@ -176,6 +177,7 @@ export default function MarketIndexAccordion({ navbarHeight = 0, onCustomSetting
   const [tickerIndex, setTickerIndex] = useState(0);
   const rootRef = useRef(null);
   const hasInitializedSelectedCodes = useRef(false);
+  const selectionChangeSourceRef = useRef('initial');
 
   useEffect(() => {
     const el = rootRef.current;
@@ -237,24 +239,42 @@ export default function MarketIndexAccordion({ navbarHeight = 0, onCustomSetting
     if (!indices.length || typeof window === 'undefined') return;
     if (hasInitializedSelectedCodes.current) return;
     try {
-      const parsed = storageStore.getItem('marketIndexSelected');
+      const localSelection = storageStore.getItem('marketIndexSelected');
+      const storedCustomSettings = storageStore.getItem('customSettings', {});
+      const savedSelection = isArray(localSelection) ? localSelection : storedCustomSettings?.marketIndexSelected;
       const availableCodes = new Set(indices.map((it) => it.code));
-      if (parsed) {
-        if (isArray(parsed)) {
-          const filtered = parsed.filter((c) => availableCodes.has(c));
-          if (filtered.length) {
-            setSelectedCodes(filtered);
-            hasInitializedSelectedCodes.current = true;
-            return;
-          }
+      if (isArray(savedSelection)) {
+        const filtered = savedSelection.filter((c) => availableCodes.has(c));
+        if (filtered.length) {
+          selectionChangeSourceRef.current = 'hydrate';
+          hasInitializedSelectedCodes.current = true;
+          setSelectedCodes(filtered);
+          return;
         }
       }
       const defaults = DEFAULT_SELECTED_CODES.filter((c) => availableCodes.has(c));
+      selectionChangeSourceRef.current = 'hydrate';
+      hasInitializedSelectedCodes.current = true;
       setSelectedCodes(defaults.length ? defaults : indices.map((it) => it.code).slice(0, 3));
     } catch {
+      selectionChangeSourceRef.current = 'hydrate';
+      hasInitializedSelectedCodes.current = true;
       setSelectedCodes(indices.map((it) => it.code).slice(0, 3));
     }
   }, [indices]);
+
+  useEffect(() => {
+    const syncedSelection = customSettings?.marketIndexSelected;
+    if (!indices.length || !isArray(syncedSelection)) return;
+
+    const availableCodes = new Set(indices.map((item) => item.code));
+    const filtered = syncedSelection.filter((code) => availableCodes.has(code));
+    if (!filtered.length || JSON.stringify(filtered) === JSON.stringify(selectedCodes)) return;
+
+    selectionChangeSourceRef.current = 'hydrate';
+    hasInitializedSelectedCodes.current = true;
+    setSelectedCodes(filtered);
+  }, [customSettings?.marketIndexSelected, indices, selectedCodes]);
 
   // 持久化用户选择
   useEffect(() => {
@@ -263,6 +283,11 @@ export default function MarketIndexAccordion({ navbarHeight = 0, onCustomSetting
     try {
       // 本地首选 key：独立存储，便于快速读取
       storageStore.setItem('marketIndexSelected', JSON.stringify(selectedCodes));
+
+      if (selectionChangeSourceRef.current !== 'user') {
+        selectionChangeSourceRef.current = 'ready';
+        return;
+      }
 
       // 同步到 customSettings，便于云端同步
       const parsed = storageStore.getItem('customSettings') || {};
@@ -278,10 +303,16 @@ export default function MarketIndexAccordion({ navbarHeight = 0, onCustomSetting
           : { marketIndexSelected: selectedCodes };
       storageStore.setItem('customSettings', JSON.stringify(next));
       onCustomSettingsChange?.();
+      selectionChangeSourceRef.current = 'ready';
     } catch {
       // ignore
     }
-  }, [selectedCodes]);
+  }, [onCustomSettingsChange, selectedCodes]);
+
+  const handleSelectedCodesChange = (codes) => {
+    selectionChangeSourceRef.current = 'user';
+    setSelectedCodes(codes);
+  };
   // 用户已选择的指数列表（按 selectedCodes 顺序）
   const visibleIndices = selectedCodes.length
     ? selectedCodes.map((code) => indices.find((it) => it.code === code)).filter(Boolean)
@@ -454,11 +485,11 @@ export default function MarketIndexAccordion({ navbarHeight = 0, onCustomSetting
         onClose={() => setSettingOpen(false)}
         indices={indices}
         selectedCodes={selectedCodes}
-        onChangeSelected={setSelectedCodes}
+        onChangeSelected={handleSelectedCodesChange}
         onResetDefault={() => {
           const availableCodes = new Set(indices.map((it) => it.code));
           const defaults = DEFAULT_SELECTED_CODES.filter((c) => availableCodes.has(c));
-          setSelectedCodes(defaults.length ? defaults : indices.map((it) => it.code).slice(0, 3));
+          handleSelectedCodesChange(defaults.length ? defaults : indices.map((it) => it.code).slice(0, 3));
         }}
       />
     </div>
