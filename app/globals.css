@@ -3874,6 +3874,215 @@ html::-webkit-scrollbar-thumb:active,
   height: 17px;
 }
 
+.pwa-install-visual-entry {
+  display: flex;
+  width: 100%;
+  min-height: 64px;
+  margin-top: 14px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  touch-action: manipulation;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    transform 120ms ease;
+}
+
+.pwa-install-visual-entry:hover {
+  border-color: color-mix(in srgb, var(--primary) 60%, var(--border));
+  background: color-mix(in srgb, var(--primary) 11%, transparent);
+}
+
+.pwa-install-visual-entry:active {
+  transform: scale(0.985);
+}
+
+.pwa-install-visual-entry-icon {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+}
+
+.pwa-install-visual-entry-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.pwa-install-visual-entry-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pwa-install-visual-entry-copy strong {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.pwa-install-visual-entry-copy small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.pwa-install-visual-entry > svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: var(--muted);
+}
+
+.pwa-visual-guide-header {
+  min-height: 76px;
+  justify-content: center;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.pwa-visual-guide-back {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.pwa-visual-guide-back svg {
+  width: 20px;
+  height: 20px;
+}
+
+.pwa-ios-visual-guide {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 20px max(16px, env(safe-area-inset-bottom, 0px));
+  overflow: hidden;
+}
+
+.pwa-ios-visual-image-wrap {
+  display: flex;
+  width: 100%;
+  min-height: 180px;
+  max-width: 420px;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.pwa-ios-visual-image-wrap img {
+  width: auto;
+  max-width: 100%;
+  height: 100%;
+  max-height: 100%;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 8px;
+  object-fit: contain;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+.pwa-ios-visual-description {
+  min-height: 40px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.pwa-ios-visual-dots {
+  display: flex;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.pwa-ios-visual-dots button {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pwa-ios-visual-dots button span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  transition:
+    width 180ms ease,
+    border-radius 180ms ease,
+    background 180ms ease;
+}
+
+.pwa-ios-visual-dots button.active span {
+  width: 22px;
+  border-radius: 4px;
+  background: var(--primary);
+}
+
+.pwa-ios-visual-controls {
+  display: grid;
+  width: 100%;
+  max-width: 420px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pwa-ios-visual-controls .button {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.pwa-ios-visual-controls .button:disabled {
+  cursor: default;
+  opacity: 0.42;
+  transform: none;
+}
+
+.pwa-ios-visual-controls svg {
+  width: 18px;
+  height: 18px;
+}
+
 .pwa-install-actions {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(92px, 0.8fr);
@@ -3951,12 +4160,28 @@ html::-webkit-scrollbar-thumb:active,
   .pwa-install-actions {
     padding-top: 12px;
   }
+
+  .pwa-ios-visual-guide {
+    padding-top: 8px;
+  }
+
+  .pwa-ios-visual-description {
+    min-height: 34px;
+    margin-top: 6px;
+    font-size: 12px;
+  }
+
+  .pwa-ios-visual-dots {
+    height: 30px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .pwa-install-drawer,
   .pwa-install-primary,
-  .pwa-install-secondary {
+  .pwa-install-secondary,
+  .pwa-install-visual-entry,
+  .pwa-ios-visual-dots button span {
     transition: none !important;
   }
 }

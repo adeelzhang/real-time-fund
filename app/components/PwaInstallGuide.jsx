@@ -3,11 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import {
+  ArrowLeft,
   Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Compass,
   Download,
   ExternalLink,
+  Images,
   MoreHorizontal,
   MoreVertical,
   Share2,
@@ -31,6 +35,24 @@ import {
 const AUTO_SHOW_DELAY_MS = 2500;
 const IDLE_RETRY_MS = 1000;
 const MAX_IDLE_RETRIES = 30;
+
+const IOS_VISUAL_GUIDE = [
+  {
+    image: '/pwa-guide/ios-step-1.webp',
+    title: '打开 Safari 共享菜单',
+    description: '先点工具栏的“…”按钮，再点弹出菜单里的“共享”。'
+  },
+  {
+    image: '/pwa-guide/ios-step-2.webp',
+    title: '选择添加到主屏幕',
+    description: '在共享菜单中向上滑动，找到并点击“添加到主屏幕”。'
+  },
+  {
+    image: '/pwa-guide/ios-step-3.webp',
+    title: '确认添加',
+    description: '确认名称为“估基”，再点击右上角的“添加”。'
+  }
+];
 
 function Step({ number, icon: Icon, children }) {
   return (
@@ -60,6 +82,8 @@ export default function PwaInstallGuide() {
   const [promptReady, setPromptReady] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [source, setSource] = useState('auto');
+  const [visualGuideOpen, setVisualGuideOpen] = useState(false);
+  const [visualGuideStep, setVisualGuideStep] = useState(0);
   const deferredPromptRef = useRef(null);
 
   const variant = useMemo(() => getGuideVariant(environment, promptReady), [environment, promptReady]);
@@ -71,6 +95,8 @@ export default function PwaInstallGuide() {
   const showGuide = useCallback((nextSource) => {
     setEnvironment(detectPwaEnvironment());
     setSource(nextSource);
+    setVisualGuideOpen(false);
+    setVisualGuideStep(0);
     setOpen(true);
     sendAnalytics('pwa_guide_shown');
   }, []);
@@ -132,6 +158,18 @@ export default function PwaInstallGuide() {
       setInstalling(false);
     }
   }, [closeWithoutDismiss]);
+
+  const handleVisualGuideOpen = useCallback(() => {
+    setVisualGuideStep(0);
+    setVisualGuideOpen(true);
+    sendAnalytics('pwa_ios_visual_guide_opened');
+  }, []);
+
+  const handleVisualGuideComplete = useCallback(() => {
+    setVisualGuideOpen(false);
+    setVisualGuideStep(0);
+    sendAnalytics('pwa_ios_visual_guide_done');
+  }, []);
 
   const handleOpenChange = useCallback(
     (nextOpen) => {
@@ -220,10 +258,10 @@ export default function PwaInstallGuide() {
     },
     'ios-safari': {
       badge: 'iOS · Safari',
-      title: '添加估基到主屏幕',
-      description: 'iOS 需要通过 Safari 的分享菜单完成添加。',
+      title: '获得和 App 一致的体验',
+      description: '添加到主屏幕后，可像 App 一样从桌面打开估基。',
       steps: [
-        [Share2, '点击 Safari 工具栏中的“分享”按钮'],
+        [Share2, '点击 Safari 工具栏的“…”按钮，再点菜单里的“共享”'],
         [SquarePlus, '向上滑动，选择“添加到主屏幕”'],
         [Check, '确认名称后，点击右上角“添加”']
       ]
@@ -261,87 +299,189 @@ export default function PwaInstallGuide() {
   }[variant];
 
   const needsBrowserTransfer = variant === 'ios-browser' || variant === 'in-app';
+  const currentVisualStep = IOS_VISUAL_GUIDE[visualGuideStep];
+  const defaultHeight = visualGuideOpen
+    ? '86vh'
+    : variant === 'android-native'
+      ? '56vh'
+      : variant === 'ios-safari'
+        ? '78vh'
+        : '68vh';
 
   return (
     <Drawer open={open} onOpenChange={handleOpenChange} direction="bottom">
       <DrawerContent
         className="pwa-install-drawer"
-        defaultHeight={variant === 'android-native' ? '56vh' : '68vh'}
+        defaultHeight={defaultHeight}
         minHeight="48vh"
-        maxHeight="82vh"
+        maxHeight={visualGuideOpen ? '92vh' : '84vh'}
       >
-        <DrawerHeader className="pwa-install-header">
-          <div className="pwa-install-heading">
-            <Image
-              className="pwa-install-app-icon"
-              src="/guji-icon-180-v2.png"
-              alt="估基"
-              width={52}
-              height={52}
-              priority
-            />
-            <div className="pwa-install-heading-copy">
-              <span className="pwa-install-platform">
-                <Smartphone aria-hidden />
-                {guideContent.badge}
-              </span>
-              <DrawerTitle>{guideContent.title}</DrawerTitle>
+        {visualGuideOpen ? (
+          <>
+            <DrawerHeader className="pwa-install-header pwa-visual-guide-header">
+              <div className="pwa-install-heading">
+                <button
+                  type="button"
+                  className="pwa-visual-guide-back"
+                  onClick={() => setVisualGuideOpen(false)}
+                  aria-label="返回文字指引"
+                >
+                  <ArrowLeft aria-hidden />
+                </button>
+                <div className="pwa-install-heading-copy">
+                  <span className="pwa-install-platform">
+                    图片指引 · 第 {visualGuideStep + 1} / {IOS_VISUAL_GUIDE.length} 步
+                  </span>
+                  <DrawerTitle>{currentVisualStep.title}</DrawerTitle>
+                </div>
+              </div>
+            </DrawerHeader>
+
+            <div className="pwa-ios-visual-guide">
+              <div className="pwa-ios-visual-image-wrap">
+                <Image
+                  src={currentVisualStep.image}
+                  alt={`iOS 添加到主屏幕第 ${visualGuideStep + 1} 步：${currentVisualStep.description}`}
+                  width={720}
+                  height={960}
+                  sizes="(max-width: 640px) calc(100vw - 40px), 420px"
+                  priority={visualGuideStep === 0}
+                />
+              </div>
+              <p className="pwa-ios-visual-description">{currentVisualStep.description}</p>
+
+              <div className="pwa-ios-visual-dots" aria-label="图片步骤">
+                {IOS_VISUAL_GUIDE.map((step, index) => (
+                  <button
+                    key={step.image}
+                    type="button"
+                    className={index === visualGuideStep ? 'active' : ''}
+                    onClick={() => setVisualGuideStep(index)}
+                    aria-label={`查看第 ${index + 1} 步`}
+                    aria-current={index === visualGuideStep ? 'step' : undefined}
+                  >
+                    <span aria-hidden />
+                  </button>
+                ))}
+              </div>
+
+              <div className="pwa-ios-visual-controls">
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => setVisualGuideStep((current) => Math.max(0, current - 1))}
+                  disabled={visualGuideStep === 0}
+                >
+                  <ChevronLeft aria-hidden />
+                  上一步
+                </button>
+                {visualGuideStep < IOS_VISUAL_GUIDE.length - 1 ? (
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => setVisualGuideStep((current) => Math.min(IOS_VISUAL_GUIDE.length - 1, current + 1))}
+                  >
+                    下一步
+                    <ChevronRight aria-hidden />
+                  </button>
+                ) : (
+                  <button type="button" className="button" onClick={handleVisualGuideComplete}>
+                    <Check aria-hidden />
+                    看完了
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-          <DrawerDescription>{guideContent.description}</DrawerDescription>
-        </DrawerHeader>
+          </>
+        ) : (
+          <>
+            <DrawerHeader className="pwa-install-header">
+              <div className="pwa-install-heading">
+                <Image
+                  className="pwa-install-app-icon"
+                  src="/guji-icon-180-v2.png"
+                  alt="估基"
+                  width={52}
+                  height={52}
+                  priority
+                />
+                <div className="pwa-install-heading-copy">
+                  <span className="pwa-install-platform">
+                    <Smartphone aria-hidden />
+                    {guideContent.badge}
+                  </span>
+                  <DrawerTitle>{guideContent.title}</DrawerTitle>
+                </div>
+              </div>
+              <DrawerDescription>{guideContent.description}</DrawerDescription>
+            </DrawerHeader>
 
-        <div className="pwa-install-body">
-          <ol className="pwa-install-steps">
-            {guideContent.steps.map(([Icon, text], index) => (
-              <Step key={text} number={index + 1} icon={Icon}>
-                {text}
-              </Step>
-            ))}
-          </ol>
+            <div className="pwa-install-body">
+              <ol className="pwa-install-steps">
+                {guideContent.steps.map(([Icon, text], index) => (
+                  <Step key={text} number={index + 1} icon={Icon}>
+                    {text}
+                  </Step>
+                ))}
+              </ol>
 
-          <div className="pwa-install-actions">
-            {variant === 'android-native' ? (
-              <button
-                type="button"
-                className="button pwa-install-primary"
-                onClick={handleNativeInstall}
-                disabled={installing}
-                aria-busy={installing}
-              >
-                <Download aria-hidden />
-                {installing ? '正在打开…' : '添加到主屏幕'}
-              </button>
-            ) : needsBrowserTransfer ? (
-              <button type="button" className="button pwa-install-primary" onClick={handleCopyUrl}>
-                <ExternalLink aria-hidden />
-                复制主站网址
-              </button>
-            ) : (
-              <button type="button" className="button pwa-install-primary" onClick={handleMarkedInstalled}>
-                <CheckCircle2 aria-hidden />
-                我已添加
-              </button>
-            )}
+              {variant === 'ios-safari' ? (
+                <button type="button" className="pwa-install-visual-entry" onClick={handleVisualGuideOpen}>
+                  <span className="pwa-install-visual-entry-icon" aria-hidden>
+                    <Images />
+                  </span>
+                  <span className="pwa-install-visual-entry-copy">
+                    <strong>查看图片指引</strong>
+                    <small>红框标出每一步要点的位置</small>
+                  </span>
+                  <ChevronRight aria-hidden />
+                </button>
+              ) : null}
 
-            <button type="button" className="button secondary pwa-install-secondary" onClick={handleLater}>
-              稍后
-            </button>
-          </div>
+              <div className="pwa-install-actions">
+                {variant === 'android-native' ? (
+                  <button
+                    type="button"
+                    className="button pwa-install-primary"
+                    onClick={handleNativeInstall}
+                    disabled={installing}
+                    aria-busy={installing}
+                  >
+                    <Download aria-hidden />
+                    {installing ? '正在打开…' : '添加到主屏幕'}
+                  </button>
+                ) : needsBrowserTransfer ? (
+                  <button type="button" className="button pwa-install-primary" onClick={handleCopyUrl}>
+                    <ExternalLink aria-hidden />
+                    复制主站网址
+                  </button>
+                ) : (
+                  <button type="button" className="button pwa-install-primary" onClick={handleMarkedInstalled}>
+                    <CheckCircle2 aria-hidden />
+                    我已添加
+                  </button>
+                )}
 
-          <div className="pwa-install-text-actions">
-            {needsBrowserTransfer ? (
-              <button type="button" onClick={handleMarkedInstalled}>
-                我已添加
-              </button>
-            ) : null}
-            <button type="button" onClick={handleNeverRemind}>
-              不再提醒
-            </button>
-          </div>
+                <button type="button" className="button secondary pwa-install-secondary" onClick={handleLater}>
+                  稍后
+                </button>
+              </div>
 
-          {source === 'auto' ? <p className="pwa-install-reminder-note">选择“稍后”将在 7 天后再提醒一次</p> : null}
-        </div>
+              <div className="pwa-install-text-actions">
+                {needsBrowserTransfer ? (
+                  <button type="button" onClick={handleMarkedInstalled}>
+                    我已添加
+                  </button>
+                ) : null}
+                <button type="button" onClick={handleNeverRemind}>
+                  不再提醒
+                </button>
+              </div>
+
+              {source === 'auto' ? <p className="pwa-install-reminder-note">选择“稍后”将在 7 天后再提醒一次</p> : null}
+            </div>
+          </>
+        )}
       </DrawerContent>
     </Drawer>
   );

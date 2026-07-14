@@ -692,6 +692,8 @@ def record_event(handler):
         "pwa_standalone_launch",
         "pwa_marked_installed",
         "pwa_copy_url_clicked",
+        "pwa_ios_visual_guide_opened",
+        "pwa_ios_visual_guide_done",
     }:
         event_type = "pageview"
 
