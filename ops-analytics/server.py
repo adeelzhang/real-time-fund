@@ -15,7 +15,6 @@ from zoneinfo import ZoneInfo
 
 
 DB_PATH = os.environ.get("DB_PATH", "/data/analytics.sqlite3")
-ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 ANALYTICS_SALT = os.environ.get("ANALYTICS_SALT", "guji")
 STATS_TZ = os.environ.get("STATS_TZ", "Asia/Shanghai")
@@ -167,10 +166,7 @@ def json_response(handler, data, status=HTTPStatus.OK, extra_headers=None):
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Cache-Control", "no-store")
     handler.send_header("Access-Control-Allow-Origin", "*")
-    handler.send_header(
-        "Access-Control-Allow-Headers",
-        "Content-Type, X-Admin-Username, X-Admin-Password, Authorization, apikey",
-    )
+    handler.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password, Authorization, apikey")
     for key, value in (extra_headers or {}).items():
         handler.send_header(key, str(value))
     handler.send_header("Content-Length", str(len(body)))
@@ -198,13 +194,10 @@ def head_response(handler, status=HTTPStatus.OK, content_type="text/html; charse
 
 
 def is_authorized(handler):
-    if not ADMIN_USERNAME or not ADMIN_PASSWORD:
+    if not ADMIN_PASSWORD:
         return False
-    supplied_username = handler.headers.get("X-Admin-Username", "")
     supplied_password = handler.headers.get("X-Admin-Password", "")
-    username_matches = hmac.compare_digest(supplied_username, ADMIN_USERNAME)
-    password_matches = hmac.compare_digest(supplied_password, ADMIN_PASSWORD)
-    return username_matches and password_matches
+    return hmac.compare_digest(supplied_password, ADMIN_PASSWORD)
 
 
 def get_bearer_token(handler):
@@ -992,7 +985,7 @@ OPS_HTML = r"""<!doctype html>
     }
     h1 { margin: 0; font-size: 20px; }
     main { width: min(1280px, 100%); margin: 0 auto; padding: 24px; }
-    .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0; }
+    .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     input, button {
       height: 40px;
       border-radius: 8px;
@@ -1001,8 +994,6 @@ OPS_HTML = r"""<!doctype html>
       font: inherit;
     }
     input { min-width: min(360px, 80vw); background: #fff; color: var(--text); }
-    #username { min-width: min(220px, 80vw); }
-    #password { min-width: min(280px, 80vw); }
     button { cursor: pointer; background: var(--text); color: #fff; font-weight: 650; }
     button.secondary { background: #fff; color: var(--text); }
     .status { color: var(--muted); font-size: 13px; }
@@ -1117,12 +1108,11 @@ OPS_HTML = r"""<!doctype html>
       <h1>估基运营管理台</h1>
       <div class="status" id="status">等待加载</div>
     </div>
-    <form class="toolbar" id="loginForm">
-      <input id="username" name="username" type="text" autocomplete="username" placeholder="管理员账号">
-      <input id="password" name="password" type="password" autocomplete="current-password" placeholder="管理员密码">
-      <button type="submit" id="save">登录</button>
-      <button type="button" class="secondary" id="refresh">刷新</button>
-    </form>
+    <div class="toolbar">
+      <input id="password" type="password" autocomplete="current-password" placeholder="管理员密码">
+      <button id="save">连接</button>
+      <button class="secondary" id="refresh">刷新</button>
+    </div>
   </header>
   <main>
     <section class="metrics">
@@ -1180,7 +1170,6 @@ OPS_HTML = r"""<!doctype html>
   <script>
     const $ = (id) => document.getElementById(id);
     const fmt = (n) => Number(n || 0).toLocaleString('zh-CN');
-    const usernameInput = $('username');
     const passwordInput = $('password');
     let timer = null;
     let chartResizeFrame = null;
@@ -1334,15 +1323,12 @@ OPS_HTML = r"""<!doctype html>
       renderChart();
     }
     async function load() {
-      const username = usernameInput.value.trim();
       const password = passwordInput.value;
-      if (!username || !password) { setStatus('请输入管理员账号和密码'); return; }
+      if (!password) { setStatus('请输入管理员密码'); return; }
       setStatus('加载中...');
-      const res = await fetch('/api/analytics/stats', {
-        headers: { 'X-Admin-Username': username, 'X-Admin-Password': password }
-      });
+      const res = await fetch('/api/analytics/stats', { headers: { 'X-Admin-Password': password } });
       if (!res.ok) {
-        setStatus(res.status === 401 ? '管理员账号或密码错误' : `加载失败 ${res.status}`);
+        setStatus(res.status === 401 ? '管理员密码无效' : `加载失败 ${res.status}`);
         return;
       }
       const data = await res.json();
@@ -1376,10 +1362,7 @@ OPS_HTML = r"""<!doctype html>
       setStatus(`已更新 ${new Date(data.generatedAt * 1000).toLocaleString('zh-CN')} · ${data.timezone}`);
       if (!timer) timer = setInterval(load, 15000);
     }
-    $('loginForm').addEventListener('submit', (event) => {
-      event.preventDefault();
-      load();
-    });
+    $('save').addEventListener('click', load);
     $('refresh').addEventListener('click', load);
     document.querySelectorAll('[data-chart-range]').forEach((button) => {
       button.addEventListener('click', () => selectChartRange(button.dataset.chartRange));
@@ -1395,6 +1378,7 @@ OPS_HTML = r"""<!doctype html>
     } else {
       window.addEventListener('resize', renderChart);
     }
+    passwordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
   </script>
 </body>
 </html>"""
@@ -1410,10 +1394,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header(
-            "Access-Control-Allow-Headers",
-            "Content-Type, X-Admin-Username, X-Admin-Password, Authorization, apikey",
-        )
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password, Authorization, apikey")
         self.end_headers()
 
     def do_GET(self):

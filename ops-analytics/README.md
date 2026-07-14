@@ -4,7 +4,6 @@
 
 ## 环境变量
 
-- `ADMIN_USERNAME`：管理台管理员账号，必填。账号只保存在服务器环境变量中。
 - `ADMIN_PASSWORD`：管理台管理员密码，必填。密码只保存在服务器环境变量中。
 - `ANALYTICS_SALT`：IP 哈希盐值，建议生产环境固定为随机长字符串。
 - `SUPABASE_SERVICE_ROLE_KEY`：Supabase service role key，用于统计 Auth 邮箱注册用户数。
@@ -15,7 +14,7 @@
 ## 本地运行
 
 ```bash
-ADMIN_USERNAME=guji-admin ADMIN_PASSWORD=change-me python server.py
+ADMIN_PASSWORD=change-me python server.py
 ```
 
 ## Docker
@@ -23,7 +22,6 @@ ADMIN_USERNAME=guji-admin ADMIN_PASSWORD=change-me python server.py
 ```bash
 docker build -t guji-analytics .
 docker run -d --name guji-analytics \
-  -e ADMIN_USERNAME=guji-admin \
   -e ADMIN_PASSWORD=change-me \
   -e ANALYTICS_SALT=random-salt \
   -v /opt/guji-analytics/data:/data \
