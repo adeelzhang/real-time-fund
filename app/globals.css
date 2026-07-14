@@ -270,6 +270,10 @@ body::before {
   display: none;
 }
 
+.mobile-tab-swipe-surface {
+  overscroll-behavior-x: none;
+}
+
 .page-width-slider {
   -webkit-appearance: none;
   appearance: none;
