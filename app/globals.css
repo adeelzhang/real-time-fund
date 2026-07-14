@@ -191,7 +191,8 @@ html {
 
 html,
 body {
-  overscroll-behavior-y: none;
+  /* Keep the platform's native edge resistance and spring-back on touch devices. */
+  overscroll-behavior-y: auto;
   height: 100%;
   overflow-x: clip;
   will-change: auto; /* 或者移除任何 will-change: transform */
@@ -2784,6 +2785,12 @@ html::-webkit-scrollbar-thumb:active,
 
 /* 移动端：首页底部留白（悬浮式底栏 + 安全区） */
 @media (max-width: 640px) {
+  html,
+  body {
+    overscroll-behavior-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .content-with-mobile-tabbar {
     padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px));
   }
