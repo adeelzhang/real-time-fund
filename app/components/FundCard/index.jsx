@@ -21,6 +21,7 @@ import FundTrendChart from '../FundTrendChart';
 import FundValuationTrendChart from '../FundValuationTrendChart';
 import FundIntradayChart from '../FundIntradayChart';
 import FundDailyEarnings from '../FundDailyEarnings';
+import FundHoldingsDetailTable from '../FundHoldingsDetailTable';
 import { ChevronIcon, SettingsIcon, StarIcon, SwitchIcon, TrashIcon, LinkIcon } from '../Icons';
 import { getTagThemeBadgeProps } from '../AddTagDialog';
 
@@ -186,6 +187,7 @@ export default function Index({
   todayPercentModes,
   valuationSeries,
   intradaySeriesOverride,
+  managerHoldingsData,
   collapsedCodes,
   collapsedTrends,
   collapsedValuationTrends,
@@ -854,62 +856,45 @@ export default function Index({
       })()}
 
       {layoutMode === 'drawer' ? (
-        <Tabs defaultValue={hasHoldings ? 'holdings' : 'trend'} className="w-full">
+        <Tabs defaultValue="holdings" className="w-full">
           <TabsList className="w-full flex">
-            {hasHoldings && <TabsTrigger value="holdings">前10重仓</TabsTrigger>}
+            <TabsTrigger value="holdings">前10重仓</TabsTrigger>
             <TabsTrigger value="trend">业绩走势</TabsTrigger>
             {showValuationTrend && <TabsTrigger value="valuation_trend">估值走势</TabsTrigger>}
             {hasHoldingAmount && <TabsTrigger value="earnings">我的收益</TabsTrigger>}
           </TabsList>
-          {hasHoldings && (
-            <TabsContent value="holdings" className="mt-3 outline-none">
-              {topHoldings.assetAllocation && topHoldings.assetAllocation.length > 0 && (
-                <div className="row" style={{ marginBottom: 12 }}>
-                  {topHoldings.assetAllocation.map((item, idx) => (
-                    <Stat
-                      key={idx}
-                      label={item.name}
-                      value={`${item.value.toFixed(2)}%`}
-                      delta={item.name === '股票' ? 1 : undefined}
-                    />
-                  ))}
-                </div>
-              )}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 4
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <span className="muted">重仓股票：</span>
-                  <span style={{ color: 'var(--foreground)' }}>{top10WeightSum.toFixed(2)}%</span>
-                </div>
-                <span className="muted">涨跌幅 / 占比</span>
-              </div>
-              <div className="list">
-                {topHoldings.holdings.map((h, idx) => (
-                  <div className="item" key={idx}>
-                    <span className="name">{h.name}</span>
-                    <div className="values">
-                      {isNumber(h.change) && (
-                        <span
-                          className={`badge ${h.change > 0 ? 'up' : h.change < 0 ? 'down' : ''}`}
-                          style={{ marginRight: 8 }}
-                        >
-                          {h.change > 0 ? '+' : ''}
-                          {h.change.toFixed(2)}%
-                        </span>
-                      )}
-                      <span className="weight">{h.weight}</span>
-                    </div>
+          <TabsContent value="holdings" className="mt-3 outline-none">
+            <FundHoldingsDetailTable
+              holdingRows={managerHoldingsData?.holdingRows || []}
+              allocationRows={managerHoldingsData?.allocationRows || []}
+              stockIntraday={managerHoldingsData?.stockIntraday || {}}
+              holdingsLoading={Boolean(managerHoldingsData?.holdingsLoading)}
+              stockQuoteDate={managerHoldingsData?.stockQuoteDate}
+              emptyFallback={
+                hasHoldings ? (
+                  <div className="list">
+                    {topHoldings.holdings.map((h, idx) => (
+                      <div className="item" key={idx}>
+                        <span className="name">{h.name}</span>
+                        <div className="values">
+                          {isNumber(h.change) && (
+                            <span
+                              className={`badge ${h.change > 0 ? 'up' : h.change < 0 ? 'down' : ''}`}
+                              style={{ marginRight: 8 }}
+                            >
+                              {h.change > 0 ? '+' : ''}
+                              {h.change.toFixed(2)}%
+                            </span>
+                          )}
+                          <span className="weight">{h.weight}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </TabsContent>
-          )}
+                ) : null
+              }
+            />
+          </TabsContent>
           <TabsContent value="trend" className="mt-3 outline-none">
             <FundTrendChart
               key={`${f.code}-${theme}`}

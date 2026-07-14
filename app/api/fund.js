@@ -438,6 +438,14 @@ export const fetchHotSectors = async ({ pageSize = 80 } = {}) => {
   return payload.data;
 };
 
+export const fetchGlobalQuotes = async () => {
+  const payload = await fetchProtectedMarketJson('/api/global-quotes', { method: 'GET' });
+  if (!payload || payload.success !== true || !isArray(payload.data?.groups)) {
+    throw new Error(payload?.error || '加载全球行情失败');
+  }
+  return payload.data;
+};
+
 function normalizeEastmoneyScriptUrl(url) {
   let key = url;
   try {

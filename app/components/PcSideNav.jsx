@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { motion, LayoutGroup, useReducedMotion } from 'framer-motion';
-import { Home, TrendingUp, ChevronRight } from 'lucide-react';
+import { Globe2, Home, TrendingUp, ChevronRight } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 const TABS = [
   { id: 'home', label: '首页', Icon: Home },
-  { id: 'market', label: '行情', Icon: TrendingUp }
+  { id: 'market', label: '行情', Icon: TrendingUp },
+  { id: 'global', label: '全球', Icon: Globe2 }
 ];
 
 export default function PcSideNav({ value, onChange }) {

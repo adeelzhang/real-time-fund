@@ -47,6 +47,7 @@ import MobileFundTable from './components/MobileFundTable';
 import MobileBottomNav from './components/MobileBottomNav';
 import MineTab from './components/MineTab';
 import MarketTab from './components/MarketTab';
+import GlobalMarketTab from './components/GlobalMarketTab';
 import PcSideNav from './components/PcSideNav';
 import { useTheme } from './hooks/useTheme';
 import { useTradingDay } from './hooks/useTradingDay';
@@ -378,12 +379,19 @@ export default function HomePage() {
     [setCustomSettings]
   );
   const [hasVisitedMarketTab, setHasVisitedMarketTab] = useState(false);
+  const [hasVisitedGlobalTab, setHasVisitedGlobalTab] = useState(false);
 
   useEffect(() => {
     if (mainTab === 'market' && !hasVisitedMarketTab) {
       setHasVisitedMarketTab(true);
     }
   }, [mainTab, hasVisitedMarketTab]);
+
+  useEffect(() => {
+    if (mainTab === 'global' && !hasVisitedGlobalTab) {
+      setHasVisitedGlobalTab(true);
+    }
+  }, [mainTab, hasVisitedGlobalTab]);
 
   const [mobileBottomNavHidden, setMobileBottomNavHidden] = useState(false);
   const lastScrollYRef = useRef(0);
@@ -4128,7 +4136,7 @@ export default function HomePage() {
     .join(' ');
 
   /** 移动端底部 Tab 切换时保留首页 DOM，用显隐代替卸载 */
-  const mobileHomeTabVisible = mainTab === 'home' || mainTab === 'market';
+  const mobileHomeTabVisible = mainTab === 'home' || mainTab === 'market' || mainTab === 'global';
 
   /** PC / 移动端行、FundCard 共用：统一 name / fundName 后走单删逻辑 */
   const handleRemoveFundEntry = useCallback(
@@ -5273,6 +5281,11 @@ export default function HomePage() {
                 isActive={mainTab === 'market'}
                 fundDetailStyle={fundDetailStyle}
               />
+            </div>
+          )}
+          {hasVisitedGlobalTab && (
+            <div style={{ display: mainTab === 'global' ? 'contents' : 'none' }}>
+              <GlobalMarketTab isActive={mainTab === 'global'} user={user} onLogin={handleOpenLogin} />
             </div>
           )}
         </>

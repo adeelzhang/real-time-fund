@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, LayoutGroup, useReducedMotion, AnimatePresence } from 'framer-motion';
-import { Home, User, TrendingUp } from 'lucide-react';
+import { Globe2, Home, User, TrendingUp } from 'lucide-react';
 
 const TABS = [
   { id: 'home', label: '首页', Icon: Home },
   { id: 'market', label: '行情', Icon: TrendingUp },
+  { id: 'global', label: '全球', Icon: Globe2 },
   { id: 'mine', label: '我的', Icon: User }
 ];
 

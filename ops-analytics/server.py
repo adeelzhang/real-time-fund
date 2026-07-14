@@ -26,6 +26,55 @@ MARKET_MAX_BODY = 1024
 AUTH_CACHE_TTL = 45
 REGISTERED_USERS_CACHE_TTL = 300
 MARKET_RATE_LIMIT_SECONDS = 1.0
+GLOBAL_QUOTES_CACHE_TTL = 5.0
+
+GLOBAL_QUOTE_GROUPS = (
+    (
+        "aStock",
+        "A股指数",
+        (
+            ("sh000001", "sh000001", "上证指数", "A股指数"),
+            ("sz399001", "sz399001", "深圳成指", "A股指数"),
+            ("sz399006", "sz399006", "创业板指", "A股指数"),
+            ("bj899050", "bj899050", "北证50", "A股指数"),
+            ("sh000688", "sh000688", "科创50", "A股指数"),
+            ("sh000905", "sh000905", "中证500", "A股指数"),
+            ("sh000300", "sh000300", "沪深300", "A股指数"),
+            ("sh000016", "sh000016", "上证50", "A股指数"),
+            ("sh000852", "sh000852", "中证1000", "A股指数"),
+        ),
+    ),
+    (
+        "global",
+        "全球市场",
+        (
+            ("100.HSI", "hkHSI", "恒生指数", "全球指数"),
+            ("100.HSCEI", "hkHSCEI", "国企指数", "全球指数"),
+            ("101.DJIA", "usDJI", "道琼斯指数", "全球指数"),
+            ("101.NDX", "usNDX", "纳指100", "全球指数"),
+            ("101.SPX", "usSPY", "标普500 ETF代理", "ETF代理行情"),
+            ("101.N225", "usEWJ", "日本市场 ETF代理", "ETF代理行情"),
+            ("101.DAX", "usEWG", "德国市场 ETF代理", "ETF代理行情"),
+            ("101.FTSE", "usEWU", "英国市场 ETF代理", "ETF代理行情"),
+            ("101.CAC", "usEWQ", "法国市场 ETF代理", "ETF代理行情"),
+        ),
+    ),
+    (
+        "commodity",
+        "商品相关 ETF",
+        (
+            ("usGLD", "usGLD", "黄金ETF", "商品相关ETF"),
+            ("usSLV", "usSLV", "白银ETF", "商品相关ETF"),
+            ("usUSO", "usUSO", "原油ETF", "商品相关ETF"),
+            ("usDBA", "usDBA", "农业ETF", "商品相关ETF"),
+            ("usCOPP", "usCOPP", "铜矿ETF", "商品相关ETF"),
+            ("usUNG", "usUNG", "天然气ETF", "商品相关ETF"),
+            ("usGDX", "usGDX", "黄金矿业ETF", "商品相关ETF"),
+            ("usSILJ", "usSILJ", "白银矿业ETF", "商品相关ETF"),
+            ("usXLE", "usXLE", "能源ETF", "商品相关ETF"),
+        ),
+    ),
+)
 
 AUTH_CACHE = {}
 AUTH_CACHE_LOCK = threading.Lock()
@@ -33,6 +82,8 @@ REGISTERED_USERS_CACHE = {"expires_at": 0.0, "data": None}
 REGISTERED_USERS_CACHE_LOCK = threading.Lock()
 RATE_LIMITS = {}
 RATE_LIMIT_LOCK = threading.Lock()
+GLOBAL_QUOTES_CACHE = {"expires_at": 0.0, "data": None}
+GLOBAL_QUOTES_CACHE_LOCK = threading.Lock()
 
 
 def now_ts():
@@ -334,6 +385,119 @@ def authorize_market_request(handler):
             return None
         RATE_LIMITS[user_id] = now
     return user_id
+
+
+def optional_float(value):
+    try:
+        number = float(value)
+        if number != number or number in {float("inf"), float("-inf")}:
+            return None
+        return number
+    except Exception:
+        return None
+
+
+def parse_tencent_quote_rows(text):
+    rows = {}
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.strip()
+        if not line.startswith("v_") or '="' not in line:
+            continue
+        prefix, payload = line.split('="', 1)
+        code = prefix[2:]
+        payload = payload.rsplit('"', 1)[0]
+        rows[code] = payload.split("~")
+    return rows
+
+
+def is_a_stock_trading_time():
+    now = datetime.now(get_tz())
+    minutes = now.hour * 60 + now.minute
+    return now.weekday() < 5 and ((570 <= minutes <= 690) or (780 <= minutes < 900))
+
+
+def fetch_global_quotes(handler):
+    now = time.monotonic()
+    with GLOBAL_QUOTES_CACHE_LOCK:
+        cached = GLOBAL_QUOTES_CACHE.get("data")
+        if cached and GLOBAL_QUOTES_CACHE.get("expires_at", 0) > now:
+            json_response(handler, {"success": True, "data": cached})
+            return
+
+    provider_codes = [row[1] for _, _, group_rows in GLOBAL_QUOTE_GROUPS for row in group_rows]
+    api_url = f"https://qt.gtimg.cn/q={','.join(provider_codes)}"
+    req = urllib_request.Request(
+        api_url,
+        headers={
+            "Accept": "text/plain,*/*",
+            "Referer": "https://gu.qq.com/",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+        },
+    )
+
+    try:
+        with urllib_request.urlopen(req, timeout=12) as response:
+            raw = response.read(1024 * 1024)
+        quote_rows = parse_tencent_quote_rows(raw.decode("gb18030", errors="replace"))
+    except urllib_error.HTTPError as err:
+        json_response(handler, {"success": False, "error": f"全球行情接口请求失败 ({err.code})"}, HTTPStatus.BAD_GATEWAY)
+        return
+    except Exception as err:
+        json_response(
+            handler,
+            {"success": False, "error": f"全球行情接口请求失败: {sanitize(err, 160)}"},
+            HTTPStatus.BAD_GATEWAY,
+        )
+        return
+
+    groups = []
+    resolved_count = 0
+    for group_id, title, group_rows in GLOBAL_QUOTE_GROUPS:
+        items = []
+        for code, provider_code, name, quote_type in group_rows:
+            parts = quote_rows.get(provider_code, [])
+            price = optional_float(parts[3] if len(parts) > 3 else None)
+            change = optional_float(parts[31] if len(parts) > 31 else None)
+            pct = optional_float(parts[32] if len(parts) > 32 else None)
+            if price is not None:
+                resolved_count += 1
+            items.append(
+                {
+                    "code": code,
+                    "providerCode": provider_code,
+                    "name": name,
+                    "type": quote_type,
+                    "price": price,
+                    "change": change,
+                    "pct": pct,
+                    "preClose": optional_float(parts[4] if len(parts) > 4 else None),
+                    "open": optional_float(parts[5] if len(parts) > 5 else None),
+                    "high": optional_float(parts[33] if len(parts) > 33 else None),
+                    "low": optional_float(parts[34] if len(parts) > 34 else None),
+                    "volume": optional_float(parts[36] if len(parts) > 36 else None),
+                    "amount": optional_float(parts[37] if len(parts) > 37 else None),
+                    "updateTime": sanitize(parts[30] if len(parts) > 30 else "", 32),
+                }
+            )
+        groups.append({"id": group_id, "title": title, "items": items})
+
+    if resolved_count == 0:
+        json_response(handler, {"success": False, "error": "全球行情接口暂无可用数据"}, HTTPStatus.BAD_GATEWAY)
+        return
+
+    data = {
+        "groups": groups,
+        "isAStockTrading": is_a_stock_trading_time(),
+        "updatedAt": datetime.now(get_tz()).isoformat(),
+    }
+    with GLOBAL_QUOTES_CACHE_LOCK:
+        GLOBAL_QUOTES_CACHE["data"] = data
+        GLOBAL_QUOTES_CACHE["expires_at"] = time.monotonic() + GLOBAL_QUOTES_CACHE_TTL
+    json_response(handler, {"success": True, "data": data})
 
 
 def local_midnight(dt):
@@ -1005,6 +1169,11 @@ class Handler(BaseHTTPRequestHandler):
             if not authorize_market_request(self):
                 return
             fetch_hot_sectors(self, parsed)
+            return
+        if parsed.path == "/api/global-quotes":
+            if not authorize_market_request(self):
+                return
+            fetch_global_quotes(self)
             return
         json_response(self, {"ok": False, "error": "not found"}, HTTPStatus.NOT_FOUND)
 

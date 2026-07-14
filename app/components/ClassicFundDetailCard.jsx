@@ -11,9 +11,16 @@ export default function ClassicFundDetailCard({ row, getFundCardProps, layoutMod
   const fundCode = fallbackFund.code || row?.code || '';
   const fund = funds?.find((item) => item.code === fundCode) || fallbackFund;
   const referenceNav = Number(fund?.dwjz);
-  const { series } = useFundManagerIntraday(fundCode, Number.isFinite(referenceNav) ? referenceNav : null);
+  const managerHoldingsData = useFundManagerIntraday(fundCode, Number.isFinite(referenceNav) ? referenceNav : null);
 
   if (!cardProps) return null;
 
-  return <FundCard {...cardProps} layoutMode={layoutMode} intradaySeriesOverride={series} />;
+  return (
+    <FundCard
+      {...cardProps}
+      layoutMode={layoutMode}
+      intradaySeriesOverride={managerHoldingsData.series}
+      managerHoldingsData={managerHoldingsData}
+    />
+  );
 }

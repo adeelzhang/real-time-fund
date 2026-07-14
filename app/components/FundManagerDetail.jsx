@@ -11,7 +11,7 @@ import * as qk from '../lib/query-keys';
 import { useModalStore, useStorageStore } from '../stores';
 import { useFundManagerIntraday } from '../hooks/useFundManagerIntraday';
 import FundIntradayChart from './FundIntradayChart';
-import FundManagerSparkline from './FundManagerSparkline';
+import FundHoldingsDetailTable from './FundHoldingsDetailTable';
 import FundTrendChart from './FundTrendChart';
 
 const selectSubModalOpen = (state) =>
@@ -293,55 +293,13 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
 
             <section className="fund-manager-section">
               <SectionTitle>当前基金持仓明细</SectionTitle>
-              {stockQuoteDate ? <div className="fund-manager-market-note">个股行情日期 {stockQuoteDate}</div> : null}
-              {allocationRows.length > 0 ? (
-                <div className="fund-manager-allocation-row">
-                  {allocationRows.map((item) => (
-                    <span key={item.name}>
-                      {item.name} <strong>{formatPercent(item.value).replace('+', '')}</strong>
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-              {holdingsLoading ? (
-                <div className="fund-manager-empty">加载持仓中...</div>
-              ) : holdingRows.length > 0 ? (
-                <div className="fund-manager-holdings">
-                  <div className="fund-manager-holding-head">
-                    <span>股票名称</span>
-                    <span>日内走势</span>
-                    <span>最新涨跌</span>
-                    <span>持仓占比</span>
-                  </div>
-                  {holdingRows.map((item, index) => {
-                    const change = asNumber(stockIntraday[item.code]?.changePct) ?? asNumber(item.change);
-                    const weight = asNumber(String(item.weight ?? '').replace('%', ''));
-                    const stockQuote = stockIntraday[item.code];
-                    const stockSeries = stockQuote?.points || [];
-                    return (
-                      <div className="fund-manager-holding-row" key={`${item.code || item.name}-${index}`}>
-                        <span className="fund-manager-holding-name">
-                          <strong>{item.name || '—'}</strong>
-                          {item.code ? <small>{item.code}</small> : null}
-                        </span>
-                        <span className="fund-manager-holding-sparkline">
-                          <FundManagerSparkline
-                            values={stockSeries.map((point) => point.price)}
-                            positive={(asNumber(stockQuote?.changePct) ?? change) >= 0}
-                          />
-                        </span>
-                        <strong className={getDeltaClass(change)}>{formatPercent(change)}</strong>
-                        <span className="fund-manager-weight">
-                          <strong>{weight == null ? '—' : `${weight.toFixed(2)}%`}</strong>
-                          <i style={{ width: `${Math.min(Math.max(weight || 0, 0) * 5, 100)}%` }} />
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="fund-manager-empty">暂无持仓明细</div>
-              )}
+              <FundHoldingsDetailTable
+                holdingRows={holdingRows}
+                allocationRows={allocationRows}
+                stockIntraday={stockIntraday}
+                holdingsLoading={holdingsLoading}
+                stockQuoteDate={stockQuoteDate}
+              />
             </section>
 
             <section className="fund-manager-section">
