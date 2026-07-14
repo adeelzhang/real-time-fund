@@ -367,15 +367,12 @@ export default function HomePage() {
 
   const [mainTab, setMainTab] = useState('home');
   const fundDetailStyle = customSettings?.fundDetailStyle === 'classic' ? 'classic' : 'manager';
-  const handleFundDetailStyleChange = useCallback(
-    (managerEnabled) => {
-      setCustomSettings((previous = {}) => ({
-        ...previous,
-        fundDetailStyle: managerEnabled ? 'manager' : 'classic'
-      }));
-    },
-    [setCustomSettings]
-  );
+  const gaussianBlurEnabled = customSettings?.gaussianBlurEnabled !== false;
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.classList.toggle('disable-gaussian-blur', !gaussianBlurEnabled);
+  }, [gaussianBlurEnabled]);
   const [hasVisitedMarketTab, setHasVisitedMarketTab] = useState(false);
   const [hasVisitedGlobalTab, setHasVisitedGlobalTab] = useState(false);
 
@@ -3668,7 +3665,9 @@ export default function HomePage() {
     isMobileOverride,
     dynamicStyleOverride,
     containerWidthOverride,
-    showGroupDropdownOverride
+    showGroupDropdownOverride,
+    fundDetailStyleOverride,
+    gaussianBlurEnabledOverride
   ) => {
     e?.preventDefault?.();
     const seconds = secondsOverride ?? tempSeconds;
@@ -3709,6 +3708,14 @@ export default function HomePage() {
     if (targetIsMobile) setShowGroupDropdownMobile(nextShowGroupDropdown);
     else setShowGroupDropdownPc(nextShowGroupDropdown);
 
+    const nextFundDetailStyle =
+      fundDetailStyleOverride === 'classic' || fundDetailStyleOverride === 'manager'
+        ? fundDetailStyleOverride
+        : fundDetailStyle;
+    const nextGaussianBlurEnabled = isBoolean(gaussianBlurEnabledOverride)
+      ? gaussianBlurEnabledOverride
+      : gaussianBlurEnabled;
+
     // 在移动端不裁剪也不修改 pcContainerWidth，直接保留原值
     let w = Number(containerWidthOverride ?? containerWidth) || 1200;
     if (!targetIsMobile) {
@@ -3725,7 +3732,9 @@ export default function HomePage() {
           showMarketIndexMobile: nextShowMarketIndex,
           showGroupFundSearchMobile: nextShowGroupFundSearch,
           dynamicStyleMobile: nextDynamicStyle,
-          showGroupDropdownMobile: nextShowGroupDropdown
+          showGroupDropdownMobile: nextShowGroupDropdown,
+          fundDetailStyle: nextFundDetailStyle,
+          gaussianBlurEnabled: nextGaussianBlurEnabled
         });
       } else {
         setCustomSettings({
@@ -3734,7 +3743,9 @@ export default function HomePage() {
           showMarketIndexPc: nextShowMarketIndex,
           showGroupFundSearchPc: nextShowGroupFundSearch,
           dynamicStylePc: nextDynamicStyle,
-          showGroupDropdownPc: nextShowGroupDropdown
+          showGroupDropdownPc: nextShowGroupDropdown,
+          fundDetailStyle: nextFundDetailStyle,
+          gaussianBlurEnabled: nextGaussianBlurEnabled
         });
       }
     } catch {}
@@ -4464,6 +4475,8 @@ export default function HomePage() {
     dynamicStyleMobile,
     showGroupDropdownPc,
     showGroupDropdownMobile,
+    fundDetailStyle,
+    gaussianBlurEnabled,
     scanProgress: scanProgress ?? { stage: 'ocr', current: 0, total: 0 },
     scanImportProgress: scanImportProgress ?? { current: 0, total: 0, success: 0, failed: 0 },
     // Refs
@@ -5291,8 +5304,6 @@ export default function HomePage() {
         onSync={() => user?.id && syncUserConfig(user.id)}
         onMyEarnings={() => setPortfolioEarningsOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
-        managerDetailEnabled={fundDetailStyle === 'manager'}
-        onManagerDetailEnabledChange={handleFundDetailStyleChange}
       />
       {/* 弹框渲染层 - 独立组件，订阅 useModalStore，不触发 page.jsx 重渲染 */}
       <ModalsLayer callbacksRef={modalCbRef} />

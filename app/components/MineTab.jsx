@@ -4,7 +4,6 @@ import { useState } from 'react';
 import Image from 'next/image';
 import { AnimatePresence } from 'framer-motion';
 import { CalendarDays, ChevronRight, LogOut, RefreshCw, Settings } from 'lucide-react';
-import { Switch } from '@/components/ui/switch';
 import { LoginIcon } from './Icons';
 import ConfirmModal from './ConfirmModal';
 
@@ -40,9 +39,7 @@ export default function MineTab({
   onLogout,
   onSync,
   onMyEarnings,
-  onOpenSettings,
-  managerDetailEnabled = true,
-  onManagerDetailEnabledChange
+  onOpenSettings
 }) {
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const syncDescription = user
@@ -99,16 +96,11 @@ export default function MineTab({
             </div>
           </div>
         </div>
-        {user ? (
-          <ul className="mine-menu-list" role="list">
-            <MenuRow icon={LogOut} label="退出登录" onClick={() => setLogoutConfirmOpen(true)} danger />
-          </ul>
-        ) : null}
       </section>
 
       <section className="mine-section" aria-labelledby="mine-data-title">
         <h2 id="mine-data-title" className="mine-section-title">
-          资产与数据
+          功能与数据
         </h2>
         <ul className="mine-menu-list" role="list">
           <MenuRow icon={CalendarDays} label="我的收益" description="查看收益日历与历史明细" onClick={onMyEarnings} />
@@ -119,38 +111,17 @@ export default function MineTab({
             onClick={user ? onSync : onLogin}
             disabled={isSyncing}
           />
-        </ul>
-      </section>
-
-      <section className="mine-section" aria-labelledby="mine-preferences-title">
-        <h2 id="mine-preferences-title" className="mine-section-title">
-          偏好设置
-        </h2>
-        <ul className="mine-menu-list" role="list">
-          <li>
-            <label className="mine-menu-row mine-menu-switch-row glass" htmlFor="manager-detail-style-switch">
-              <span className="mine-menu-main">
-                <Settings className="mine-menu-icon" aria-hidden />
-                <span className="mine-menu-text">
-                  <span className="mine-menu-label">基金详情页</span>
-                  <span className="mine-menu-description">
-                    {managerDetailEnabled ? 'Fund Manager 模式' : '经典模式'}
-                  </span>
-                </span>
-              </span>
-              <span className="mine-menu-switch-hit">
-                <Switch
-                  id="manager-detail-style-switch"
-                  checked={managerDetailEnabled}
-                  onCheckedChange={(checked) => onManagerDetailEnabledChange?.(Boolean(checked))}
-                  aria-label="使用 Fund Manager 基金详情页"
-                />
-              </span>
-            </label>
-          </li>
           <MenuRow icon={Settings} label="设置" description="刷新、显示与数据管理" onClick={onOpenSettings} />
         </ul>
       </section>
+
+      {user ? (
+        <section className="mine-logout-section" aria-label="账户操作">
+          <ul className="mine-menu-list" role="list">
+            <MenuRow icon={LogOut} label="退出登录" onClick={() => setLogoutConfirmOpen(true)} danger />
+          </ul>
+        </section>
+      ) : null}
 
       <AnimatePresence>
         {logoutConfirmOpen ? (

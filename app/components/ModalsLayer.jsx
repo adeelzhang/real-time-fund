@@ -895,6 +895,8 @@ function ModalsLayerContent({ callbacksRef }) {
             dynamicStyleMobile={cb.current.dynamicStyleMobile}
             showGroupDropdownPc={cb.current.showGroupDropdownPc}
             showGroupDropdownMobile={cb.current.showGroupDropdownMobile}
+            fundDetailStyle={cb.current.fundDetailStyle}
+            gaussianBlurEnabled={cb.current.gaussianBlurEnabled}
           />
         )}
       </AnimatePresence>

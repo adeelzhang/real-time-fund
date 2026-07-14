@@ -26,7 +26,9 @@ export default function SettingsModal({
   dynamicStylePc = true,
   dynamicStyleMobile = true,
   showGroupDropdownPc = false,
-  showGroupDropdownMobile = false
+  showGroupDropdownMobile = false,
+  fundDetailStyle = 'manager',
+  gaussianBlurEnabled = true
 }) {
   const isMobile = useIsMobile();
   const [sliderDragging, setSliderDragging] = useState(false);
@@ -39,6 +41,8 @@ export default function SettingsModal({
   const [localDynamicStyleMobile, setLocalDynamicStyleMobile] = useState(dynamicStyleMobile);
   const [localShowGroupDropdownPc, setLocalShowGroupDropdownPc] = useState(showGroupDropdownPc);
   const [localShowGroupDropdownMobile, setLocalShowGroupDropdownMobile] = useState(showGroupDropdownMobile);
+  const [localFundDetailStyle, setLocalFundDetailStyle] = useState(fundDetailStyle);
+  const [localGaussianBlurEnabled, setLocalGaussianBlurEnabled] = useState(gaussianBlurEnabled);
   const [localContainerWidth, setLocalContainerWidth] = useState(containerWidth);
   const pageWidthTrackRef = useRef(null);
   const [viewWidth, setViewWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -110,6 +114,14 @@ export default function SettingsModal({
   }, [showGroupDropdownMobile]);
 
   useEffect(() => {
+    setLocalFundDetailStyle(fundDetailStyle);
+  }, [fundDetailStyle]);
+
+  useEffect(() => {
+    setLocalGaussianBlurEnabled(gaussianBlurEnabled);
+  }, [gaussianBlurEnabled]);
+
+  useEffect(() => {
     setLocalContainerWidth(containerWidth);
   }, [containerWidth]);
 
@@ -122,7 +134,7 @@ export default function SettingsModal({
     >
       <DialogContent
         overlayClassName={`modal-overlay ${sliderDragging ? 'modal-overlay-translucent' : ''} z-[9999]`}
-        className="!p-0 z-[10000]"
+        className="!p-0 z-[10000] max-h-[90vh] overflow-y-auto scrollbar-y-styled"
         showCloseButton={false}
       >
         <div className="glass card modal">
@@ -255,6 +267,39 @@ export default function SettingsModal({
           <div className="row" style={{ gap: 16, marginBottom: 16 }}>
             <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
               <div className="muted" style={{ marginBottom: 8, fontSize: '0.8rem' }}>
+                基金详情页样式
+              </div>
+              <div className="row" style={{ justifyContent: 'flex-start', alignItems: 'center', gap: 10 }}>
+                <Switch
+                  checked={localFundDetailStyle === 'manager'}
+                  className="ml-2 scale-125"
+                  onCheckedChange={(checked) => setLocalFundDetailStyle(checked ? 'manager' : 'classic')}
+                  aria-label="使用 Fund Manager 基金详情页"
+                />
+                <span className="muted" style={{ fontSize: '0.75rem' }}>
+                  {localFundDetailStyle === 'manager' ? 'Fund Manager' : '经典模式'}
+                </span>
+              </div>
+            </div>
+
+            <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+              <div className="muted" style={{ marginBottom: 8, fontSize: '0.8rem' }}>
+                高斯模糊效果
+              </div>
+              <div className="row" style={{ justifyContent: 'flex-start', alignItems: 'center' }}>
+                <Switch
+                  checked={localGaussianBlurEnabled}
+                  className="ml-2 scale-125"
+                  onCheckedChange={(checked) => setLocalGaussianBlurEnabled(Boolean(checked))}
+                  aria-label="启用高斯模糊效果"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="row" style={{ gap: 16, marginBottom: 16 }}>
+            <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+              <div className="muted" style={{ marginBottom: 8, fontSize: '0.8rem' }}>
                 减少动态样式效果
               </div>
               <div className="row" style={{ justifyContent: 'flex-start', alignItems: 'center' }}>
@@ -332,7 +377,9 @@ export default function SettingsModal({
                   isMobile,
                   isMobile ? localDynamicStyleMobile : localDynamicStylePc,
                   localContainerWidth,
-                  isMobile ? localShowGroupDropdownMobile : localShowGroupDropdownPc
+                  isMobile ? localShowGroupDropdownMobile : localShowGroupDropdownPc,
+                  localFundDetailStyle,
+                  localGaussianBlurEnabled
                 )
               }
               disabled={localSeconds < 30}

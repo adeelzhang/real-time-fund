@@ -2011,6 +2011,15 @@ export const fetchStockIntradayBatch = async (holdings = []) => {
 
 let localFundListPromise = null;
 
+const isStockFundSearchResult = (item) => {
+  const baseInfo = item?.FundBaseInfo || {};
+  const typeText = [baseInfo.FTYPE, item?.TYPE, item?.NAME, item?.name].filter(Boolean).join(' ');
+  return String(baseInfo.FUNDTYPE) === '001' || /股票/.test(typeText);
+};
+
+const sortFundSearchResults = (items) =>
+  [...items].sort((a, b) => Number(isStockFundSearchResult(b)) - Number(isStockFundSearchResult(a)));
+
 const searchLocalFundList = async (query) => {
   if (!localFundListPromise) {
     localFundListPromise = fetch('/allFund.json', { cache: 'force-cache' })
@@ -2027,7 +2036,7 @@ const searchLocalFundList = async (query) => {
 
   const normalizedQuery = String(query).toLocaleLowerCase('zh-CN').replace(/\s+/g, '');
   const items = await localFundListPromise;
-  return items
+  const results = items
     .filter((item) => {
       const code = String(item?.code || '');
       const name = String(item?.name || '')
@@ -2035,8 +2044,8 @@ const searchLocalFundList = async (query) => {
         .replace(/\s+/g, '');
       return code.includes(normalizedQuery) || name.includes(normalizedQuery);
     })
-    .slice(0, 20)
     .map((item) => ({ CODE: String(item.code), NAME: String(item.name), TYPE: '基金' }));
+  return sortFundSearchResults(results).slice(0, 20);
 };
 
 export const searchFunds = async (val) => {
@@ -2084,7 +2093,7 @@ export const searchFunds = async (val) => {
             }
             cleanup();
             delete window[callbackName];
-            resolve(results);
+            resolve(sortFundSearchResults(results));
           };
 
           const script = document.createElement('script');

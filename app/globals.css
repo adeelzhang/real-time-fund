@@ -2972,6 +2972,23 @@ html::-webkit-scrollbar-thumb:active,
   display: none !important;
 }
 
+/* 独立关闭毛玻璃高斯模糊，保留动画与阴影。 */
+.disable-gaussian-blur *,
+.disable-gaussian-blur *::before,
+.disable-gaussian-blur *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.disable-gaussian-blur .glass,
+.disable-gaussian-blur .group-summary-sticky,
+.disable-gaussian-blur .filter-bar,
+.disable-gaussian-blur .mobile-bottom-nav,
+.disable-gaussian-blur .drawer-content-theme,
+.disable-gaussian-blur [data-slot='dialog-content'] {
+  background: color-mix(in srgb, var(--card) 96%, transparent) !important;
+}
+
 /* fund-manager 全屏详情使用实色表面；经典浮层详情保留毛玻璃。 */
 .fund-detail-overlay-no-blur {
   -webkit-backdrop-filter: none !important;
@@ -3537,6 +3554,7 @@ html::-webkit-scrollbar-thumb:active,
   display: flex;
   width: 100%;
   max-width: 720px;
+  min-height: calc(100dvh - 48px);
   margin: 0 auto;
   flex-direction: column;
   gap: 20px;
@@ -3631,6 +3649,10 @@ html::-webkit-scrollbar-thumb:active,
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.mine-logout-section {
+  margin-top: auto;
 }
 
 .mine-menu-row {
@@ -3739,6 +3761,13 @@ html::-webkit-scrollbar-thumb:active,
   .mine-tab {
     padding-top: 20px;
     padding-bottom: 32px;
+  }
+}
+
+@media (max-width: 640px) {
+  .mine-tab {
+    min-height: calc(100dvh - 102px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    padding-bottom: 12px;
   }
 }
 
