@@ -23,8 +23,6 @@ export default function SettingsModal({
   onResetContainerWidth,
   showMarketIndexPc = true,
   showMarketIndexMobile = true,
-  showGroupFundSearchPc = true,
-  showGroupFundSearchMobile = true,
   dynamicStylePc = true,
   dynamicStyleMobile = true,
   showGroupDropdownPc = false,
@@ -37,8 +35,6 @@ export default function SettingsModal({
   const [localSeconds, setLocalSeconds] = useState(tempSeconds);
   const [localShowMarketIndexPc, setLocalShowMarketIndexPc] = useState(showMarketIndexPc);
   const [localShowMarketIndexMobile, setLocalShowMarketIndexMobile] = useState(showMarketIndexMobile);
-  const [localShowGroupFundSearchPc, setLocalShowGroupFundSearchPc] = useState(showGroupFundSearchPc);
-  const [localShowGroupFundSearchMobile, setLocalShowGroupFundSearchMobile] = useState(showGroupFundSearchMobile);
   const [localDynamicStylePc, setLocalDynamicStylePc] = useState(dynamicStylePc);
   const [localDynamicStyleMobile, setLocalDynamicStyleMobile] = useState(dynamicStyleMobile);
   const [localShowGroupDropdownPc, setLocalShowGroupDropdownPc] = useState(showGroupDropdownPc);
@@ -96,14 +92,6 @@ export default function SettingsModal({
   useEffect(() => {
     setLocalShowMarketIndexMobile(showMarketIndexMobile);
   }, [showMarketIndexMobile]);
-
-  useEffect(() => {
-    setLocalShowGroupFundSearchPc(showGroupFundSearchPc);
-  }, [showGroupFundSearchPc]);
-
-  useEffect(() => {
-    setLocalShowGroupFundSearchMobile(showGroupFundSearchMobile);
-  }, [showGroupFundSearchMobile]);
 
   useEffect(() => {
     setLocalDynamicStylePc(dynamicStylePc);
@@ -262,24 +250,6 @@ export default function SettingsModal({
                 />
               </div>
             </div>
-
-            <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-              <div className="muted" style={{ marginBottom: 8, fontSize: '0.8rem' }}>
-                显示分组内基金搜索
-              </div>
-              <div className="row" style={{ justifyContent: 'flex-start', alignItems: 'center' }}>
-                <Switch
-                  checked={isMobile ? localShowGroupFundSearchMobile : localShowGroupFundSearchPc}
-                  className="ml-2 scale-125"
-                  onCheckedChange={(checked) => {
-                    const nextValue = Boolean(checked);
-                    if (isMobile) setLocalShowGroupFundSearchMobile(nextValue);
-                    else setLocalShowGroupFundSearchPc(nextValue);
-                  }}
-                  aria-label="显示分组内基金搜索"
-                />
-              </div>
-            </div>
           </div>
 
           <div className="row" style={{ gap: 16, marginBottom: 16 }}>
@@ -358,7 +328,7 @@ export default function SettingsModal({
                   e,
                   localSeconds,
                   isMobile ? localShowMarketIndexMobile : localShowMarketIndexPc,
-                  isMobile ? localShowGroupFundSearchMobile : localShowGroupFundSearchPc,
+                  undefined,
                   isMobile,
                   isMobile ? localDynamicStyleMobile : localDynamicStylePc,
                   localContainerWidth,

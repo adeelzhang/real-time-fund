@@ -48,7 +48,6 @@ import MobileBottomNav from './components/MobileBottomNav';
 import MineTab from './components/MineTab';
 import MarketTab from './components/MarketTab';
 import PcSideNav from './components/PcSideNav';
-import SearchFund from './components/SearchFund';
 import { useTheme } from './hooks/useTheme';
 import { useTradingDay } from './hooks/useTradingDay';
 import { useHoldingProfit } from './hooks/useHoldingProfit';
@@ -281,10 +280,6 @@ export default function HomePage() {
   const inputRef = useRef(null);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // 分组内基金列表搜索（点击按钮后才应用）
-  const [groupFundSearchTerm, setGroupFundSearchTerm] = useState('');
-  const deferredGroupFundSearchTerm = useDeferredValue(groupFundSearchTerm);
-
   // --- 主题管理（抽离到 useTheme）---
   const { theme, showThemeTransition, setShowThemeTransition, handleThemeToggle } = useTheme();
 
@@ -409,7 +404,6 @@ export default function HomePage() {
   }, []);
 
   const shouldShowMarketIndex = (isMobile ? showMarketIndexMobile : showMarketIndexPc) || mainTab === 'market';
-  const shouldShowGroupFundSearch = isMobile ? showGroupFundSearchMobile : showGroupFundSearchPc;
 
   // 交易日检测（抽离到 useTradingDay）
   const { isTradingDay } = useTradingDay();
@@ -819,25 +813,9 @@ export default function HomePage() {
     };
   }, [scopedFunds]);
 
-  // 过滤和排序后的基金列表（包含“列表搜索”过滤）
+  // 当前分组的基金列表排序
   const displayFundsRaw = useMemo(() => {
     let filtered = [...scopedFunds];
-
-    const q = String(shouldShowGroupFundSearch ? (deferredGroupFundSearchTerm ?? '') : '').trim();
-    if (q) {
-      const qLower = q.toLowerCase();
-      filtered = filtered.filter((f) => {
-        const name = String(f?.name ?? '').toLowerCase();
-        const code = String(f?.code ?? '').toLowerCase();
-        let hasTagMatch = false;
-        if (f?.code && Array.isArray(fundTagListsByCode?.[f.code])) {
-          hasTagMatch = fundTagListsByCode[f.code].some(
-            (t) => t?.name && String(t.name).toLowerCase().includes(qLower)
-          );
-        }
-        return name.includes(qLower) || code.includes(qLower) || hasTagMatch;
-      });
-    }
 
     if (currentTab !== 'all' && currentTab !== 'fav' && currentTab !== SUMMARY_TAB_ID && sortBy === 'default') {
       const group = groups.find((g) => g.id === currentTab);
@@ -1130,8 +1108,6 @@ export default function HomePage() {
     sortOrder,
     holdingsForTabWithLinked,
     getHoldingProfitForTab,
-    deferredGroupFundSearchTerm,
-    shouldShowGroupFundSearch,
     currentFundDailyEarnings,
     fundExtraDataByCode,
     todayStr,
@@ -4689,12 +4665,30 @@ export default function HomePage() {
           <div style={{ display: mainTab === 'home' ? 'contents' : 'none' }}>
             <div className="grid">
               <div className="col-12">
+                {!shouldShowMarketIndex && <div aria-hidden="true" style={{ height: navbarHeight }} />}
+                {currentTab !== SUMMARY_TAB_ID && (
+                  <GroupSummary
+                    funds={displayFunds}
+                    holdings={holdingsForTabWithLinked}
+                    portfolioTabId={currentTab}
+                    groups={groups}
+                    getProfit={getHoldingProfitForTab}
+                    summaryTotalsOverride={null}
+                    stickyTop={navbarHeight + filterBarHeight + (isMobile ? -14 : 0)}
+                    isSticky={isGroupSummarySticky}
+                    onToggleSticky={(next) => setIsGroupSummarySticky(next)}
+                    masked={maskAmounts}
+                    onToggleMasked={() => setMaskAmounts((v) => !v)}
+                    shouldShowMarketIndex={shouldShowMarketIndex}
+                    navbarHeight={navbarHeight}
+                  />
+                )}
                 <div
                   ref={filterBarRef}
                   className="filter-bar"
                   style={{
                     top: `calc(${navbarHeight}px + var(--market-index-height, 0px))`,
-                    marginTop: !shouldShowMarketIndex ? navbarHeight : 0,
+                    marginTop: 0,
                     marginBottom: 8,
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -5089,7 +5083,7 @@ export default function HomePage() {
                   />
                 ) : (
                   <>
-                    {currentTab === SUMMARY_TAB_ID ? (
+                    {currentTab === SUMMARY_TAB_ID && (
                       <SummaryTabContent
                         funds={displayFunds}
                         holdings={holdingsForTabWithLinked}
@@ -5108,29 +5102,9 @@ export default function HomePage() {
                         startTransition={startTransition}
                         setCurrentTab={setCurrentTab}
                       />
-                    ) : (
-                      <GroupSummary
-                        funds={displayFunds}
-                        holdings={holdingsForTabWithLinked}
-                        portfolioTabId={currentTab}
-                        groups={groups}
-                        getProfit={getHoldingProfitForTab}
-                        summaryTotalsOverride={null}
-                        stickyTop={navbarHeight + filterBarHeight + (isMobile ? -14 : 0)}
-                        isSticky={isGroupSummarySticky}
-                        onToggleSticky={(next) => setIsGroupSummarySticky(next)}
-                        masked={maskAmounts}
-                        onToggleMasked={() => setMaskAmounts((v) => !v)}
-                        shouldShowMarketIndex={shouldShowMarketIndex}
-                        navbarHeight={navbarHeight}
-                      />
                     )}
                     {currentTab !== SUMMARY_TAB_ID && (
                       <>
-                        {shouldShowGroupFundSearch && (
-                          <SearchFund value={groupFundSearchTerm} onSearch={(next) => setGroupFundSearchTerm(next)} />
-                        )}
-
                         {displayFunds.length === 0 ? (
                           <div className="glass" style={{ marginTop: 10 }}>
                             <Empty className="border-border/60">
@@ -5141,9 +5115,7 @@ export default function HomePage() {
                                   </span>
                                 </EmptyMedia>
                                 <EmptyTitle>未找到相关基金</EmptyTitle>
-                                <EmptyDescription>
-                                  试试搜索基金名称的部分关键词，或直接输入 6 位基金代码。
-                                </EmptyDescription>
+                                <EmptyDescription>当前分组暂无可显示的基金。</EmptyDescription>
                               </EmptyHeader>
                             </Empty>
                           </div>

@@ -882,8 +882,6 @@ function ModalsLayerContent({ callbacksRef }) {
             onResetContainerWidth={cb.current.handleResetContainerWidth}
             showMarketIndexPc={cb.current.showMarketIndexPc}
             showMarketIndexMobile={cb.current.showMarketIndexMobile}
-            showGroupFundSearchPc={cb.current.showGroupFundSearchPc}
-            showGroupFundSearchMobile={cb.current.showGroupFundSearchMobile}
             dynamicStylePc={cb.current.dynamicStylePc}
             dynamicStyleMobile={cb.current.dynamicStyleMobile}
             showGroupDropdownPc={cb.current.showGroupDropdownPc}
