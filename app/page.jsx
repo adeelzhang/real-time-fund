@@ -4666,23 +4666,6 @@ export default function HomePage() {
             <div className="grid">
               <div className="col-12">
                 {!shouldShowMarketIndex && <div aria-hidden="true" style={{ height: navbarHeight }} />}
-                {currentTab !== SUMMARY_TAB_ID && (
-                  <GroupSummary
-                    funds={displayFunds}
-                    holdings={holdingsForTabWithLinked}
-                    portfolioTabId={currentTab}
-                    groups={groups}
-                    getProfit={getHoldingProfitForTab}
-                    summaryTotalsOverride={null}
-                    stickyTop={navbarHeight + filterBarHeight + (isMobile ? -14 : 0)}
-                    isSticky={isGroupSummarySticky}
-                    onToggleSticky={(next) => setIsGroupSummarySticky(next)}
-                    masked={maskAmounts}
-                    onToggleMasked={() => setMaskAmounts((v) => !v)}
-                    shouldShowMarketIndex={shouldShowMarketIndex}
-                    navbarHeight={navbarHeight}
-                  />
-                )}
                 <div
                   ref={filterBarRef}
                   className="filter-bar"
@@ -4883,12 +4866,41 @@ export default function HomePage() {
                       </Tooltip>
                     )}
                   </div>
+                </div>
 
+                {currentTab !== SUMMARY_TAB_ID && (
+                  <GroupSummary
+                    funds={displayFunds}
+                    holdings={holdingsForTabWithLinked}
+                    portfolioTabId={currentTab}
+                    groups={groups}
+                    getProfit={getHoldingProfitForTab}
+                    summaryTotalsOverride={null}
+                    stickyTop={navbarHeight + filterBarHeight + (isMobile ? -14 : 0)}
+                    isSticky={isGroupSummarySticky}
+                    onToggleSticky={(next) => setIsGroupSummarySticky(next)}
+                    masked={maskAmounts}
+                    onToggleMasked={() => setMaskAmounts((v) => !v)}
+                    shouldShowMarketIndex={shouldShowMarketIndex}
+                    navbarHeight={navbarHeight}
+                  />
+                )}
+
+                <div
+                  className="home-sort-bar"
+                  style={{
+                    display: currentTab === SUMMARY_TAB_ID ? 'none' : 'flex',
+                    justifyContent: isMobile ? 'flex-start' : 'flex-end',
+                    marginBottom: 8,
+                    padding: '4px 0 8px'
+                  }}
+                >
                   <div
                     className="sort-group"
                     style={{
-                      display: currentTab === SUMMARY_TAB_ID ? 'none' : 'flex',
+                      display: 'flex',
                       alignItems: 'center',
+                      flexWrap: 'wrap',
                       gap: 12
                     }}
                   >

@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown, ChevronLeft } from 'lucide-react';
 import { isArray } from 'lodash';
 import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { formatMoney } from '@/lib/utils';
-import { fetchFundHistory, fetchFundManagerHoldings, fetchStockIntradayBatch } from '../api/fund';
+import { fetchFundHistory } from '../api/fund';
 import * as qk from '../lib/query-keys';
 import { useModalStore, useStorageStore } from '../stores';
+import { useFundManagerIntraday } from '../hooks/useFundManagerIntraday';
 import FundIntradayChart from './FundIntradayChart';
 import FundManagerSparkline from './FundManagerSparkline';
 import FundTrendChart from './FundTrendChart';
@@ -105,54 +106,6 @@ const buildHistoryRows = (history) => {
     .reverse();
 };
 
-const buildFundIntradayFromHoldings = (holdings, intradayByCode, referenceNav, equityExposurePct) => {
-  if (!isArray(holdings) || !intradayByCode || referenceNav == null) return { series: [], date: null };
-  const equityExposure = asNumber(equityExposurePct);
-  const seriesRows = holdings
-    .map((holding) => {
-      const quote = intradayByCode[holding.code];
-      const points = quote?.points;
-      const weight = asNumber(String(holding.weight ?? '').replace('%', ''));
-      const firstPrice = asNumber(points?.[0]?.price);
-      const quotedPreviousClose = asNumber(quote?.previousClose);
-      if (!isArray(points) || points.length < 2 || weight == null || weight <= 0 || firstPrice == null) {
-        return null;
-      }
-      const previousClose = quotedPreviousClose && quotedPreviousClose > 0 ? quotedPreviousClose : firstPrice;
-      return { points, weight, previousClose, date: quote?.date || null };
-    })
-    .filter(Boolean);
-  const sessionDates = new Set(seriesRows.map((item) => item.date));
-  const totalWeight = seriesRows.reduce((sum, item) => sum + item.weight, 0);
-  if (seriesRows.length === 0 || totalWeight <= 0) return { series: [], date: null };
-
-  const times = [...new Set(seriesRows.flatMap((item) => item.points.map((point) => point.time)))].sort();
-  const priceMaps = seriesRows.map((item) => ({
-    ...item,
-    prices: new Map(item.points.map((point) => [point.time, point.price])),
-    lastPrice: asNumber(item.points[0]?.price)
-  }));
-  const series = times
-    .map((time) => {
-      let weightedChange = 0;
-      priceMaps.forEach((item) => {
-        const currentPrice = asNumber(item.prices.get(time));
-        if (currentPrice != null) item.lastPrice = currentPrice;
-        const price = item.lastPrice;
-        if (price == null) return;
-        weightedChange += ((price / item.previousClose - 1) * 100 * item.weight) / totalWeight;
-      });
-      const percentage = weightedChange * ((equityExposure ?? 100) / 100);
-      return {
-        time,
-        value: referenceNav * (1 + percentage / 100),
-        date: sessionDates.size === 1 ? seriesRows[0].date : null
-      };
-    })
-    .filter(Boolean);
-  return { series, date: sessionDates.size === 1 ? seriesRows[0].date : null };
-};
-
 function Metric({ label, value, delta, masked = false }) {
   return (
     <div className="fund-manager-metric">
@@ -174,9 +127,6 @@ function SectionTitle({ children, value, valueDelta }) {
 export default function FundManagerDetail({ row, getFundCardProps, onClose, blockClose = false }) {
   const isAnySubModalOpen = useModalStore(selectSubModalOpen);
   const funds = useStorageStore((state) => state.funds);
-  const [topHoldings, setTopHoldings] = useState(null);
-  const [stockIntraday, setStockIntraday] = useState({});
-  const [holdingsLoading, setHoldingsLoading] = useState(false);
   const [annualExpanded, setAnnualExpanded] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [historyVisibleCount, setHistoryVisibleCount] = useState(100);
@@ -189,9 +139,15 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
   const holding = cardProps?.holdings?.[fundCode];
   const profit = cardProps?.getHoldingProfit?.(fund, holding) ?? null;
   const masked = Boolean(cardProps?.masked);
-  const disclosedHoldings = topHoldings?.holdings;
-  const holdingRows = isArray(disclosedHoldings) ? disclosedHoldings : [];
-  const allocationRows = isArray(topHoldings?.assetAllocation) ? topHoldings.assetAllocation : [];
+  const {
+    holdingRows,
+    allocationRows,
+    stockIntraday,
+    holdingsLoading,
+    series: effectiveIntraday,
+    hasIntraday,
+    stockQuoteDate
+  } = useFundManagerIntraday(fundCode, asNumber(fund.dwjz));
 
   const {
     data: fullHistory = [],
@@ -204,43 +160,6 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
     staleTime: 10 * 60 * 1000
   });
 
-  useEffect(() => {
-    if (!fundCode) return;
-    let cancelled = false;
-    setHoldingsLoading(true);
-    fetchFundManagerHoldings(fundCode)
-      .then((result) => {
-        if (!cancelled) setTopHoldings(result || null);
-      })
-      .catch(() => {
-        if (!cancelled) setTopHoldings(null);
-      })
-      .finally(() => {
-        if (!cancelled) setHoldingsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [fundCode]);
-
-  useEffect(() => {
-    if (!isArray(disclosedHoldings) || disclosedHoldings.length === 0) {
-      setStockIntraday({});
-      return;
-    }
-    let cancelled = false;
-    fetchStockIntradayBatch(disclosedHoldings)
-      .then((result) => {
-        if (!cancelled) setStockIntraday(result || {});
-      })
-      .catch(() => {
-        if (!cancelled) setStockIntraday({});
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [disclosedHoldings]);
-
   const currentNav = asNumber(fund.gsz) ?? asNumber(fund.dwjz);
   const currentChange = asNumber(fund.gszzl) ?? asNumber(fund.zzl);
   const displayDate = formatDate(fund.gztime || fund.time || fund.jzrq);
@@ -248,29 +167,12 @@ export default function FundManagerDetail({ row, getFundCardProps, onClose, bloc
   const holdingShare = asNumber(holding?.share);
   const totalGain = asNumber(profit?.profitTotal);
   const dayGain = asNumber(profit?.profitToday);
-  const equityExposure = topHoldings?.equityExposurePct;
-  const derivedIntradayResult = buildFundIntradayFromHoldings(
-    holdingRows,
-    stockIntraday,
-    asNumber(fund.dwjz),
-    equityExposure
-  );
-  const effectiveIntraday = derivedIntradayResult.series;
-  const hasIntraday = effectiveIntraday.length >= 2;
   const intradaySource = hasIntraday ? 'Fund Manager 重仓估算' : null;
   const referenceNav = asNumber(fund.dwjz);
   const intradayChange =
     hasIntraday && referenceNav
       ? ((effectiveIntraday[effectiveIntraday.length - 1].value - referenceNav) / referenceNav) * 100
       : currentChange;
-  const stockQuoteDates = [
-    ...new Set(
-      Object.values(stockIntraday)
-        .map((quote) => quote?.date)
-        .filter(Boolean)
-    )
-  ];
-  const stockQuoteDate = stockQuoteDates.length === 1 ? stockQuoteDates[0] : null;
   const transactions = profit ? cardProps?.transactions?.[fundCode] || [] : [];
   const periodMetrics = [
     ['近1月', cardProps?.fundExtraData?.month],

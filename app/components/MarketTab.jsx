@@ -27,7 +27,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import MobileFundCardDrawer from './MobileFundCardDrawer';
 import FundManagerDetail from './FundManagerDetail';
-import FundCard from './FundCard';
+import ClassicFundDetailCard from './ClassicFundDetailCard';
 import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -68,7 +68,7 @@ function FundDetailDialog({ cardDialogRow, getFundCardProps, setCardDialogRow })
         </DialogHeader>
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-y-styled">
           {cardDialogRow && getFundCardProps ? (
-            <FundCard {...getFundCardProps(cardDialogRow)} layoutMode="drawer" />
+            <ClassicFundDetailCard row={cardDialogRow} getFundCardProps={getFundCardProps} />
           ) : null}
         </div>
       </DialogContent>

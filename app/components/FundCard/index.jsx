@@ -185,6 +185,7 @@ export default function Index({
   percentModes,
   todayPercentModes,
   valuationSeries,
+  intradaySeriesOverride,
   collapsedCodes,
   collapsedTrends,
   collapsedValuationTrends,
@@ -815,15 +816,24 @@ export default function Index({
       />
 
       {(() => {
-        const currentSeries = f.fundValuationTimeseries?.[f.code] || valuationSeries?.[f.code];
-        const showIntraday = !f.noValuation && isArray(currentSeries) && currentSeries.length >= 1;
+        const hasIntradayOverride = isArray(intradaySeriesOverride);
+        const currentSeries = hasIntradayOverride
+          ? intradaySeriesOverride
+          : f.fundValuationTimeseries?.[f.code] || valuationSeries?.[f.code];
+        const showIntraday =
+          (hasIntradayOverride || !f.noValuation) && isArray(currentSeries) && currentSeries.length >= 1;
         if (!showIntraday) return null;
 
-        if (f.gztime && toTz(todayStr).startOf('day').isAfter(toTz(f.gztime).startOf('day'))) {
+        if (!hasIntradayOverride && f.gztime && toTz(todayStr).startOf('day').isAfter(toTz(f.gztime).startOf('day'))) {
           return null;
         }
 
-        if (f.jzrq && f.gztime && toTz(f.jzrq).startOf('day').isSameOrAfter(toTz(f.gztime).startOf('day'))) {
+        if (
+          !hasIntradayOverride &&
+          f.jzrq &&
+          f.gztime &&
+          toTz(f.jzrq).startOf('day').isSameOrAfter(toTz(f.gztime).startOf('day'))
+        ) {
           return null;
         }
 

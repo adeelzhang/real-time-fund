@@ -24,7 +24,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Plus, Sparkles } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 import PcTableSettingModal from './PcTableSettingModal';
-import FundCard from './FundCard';
+import ClassicFundDetailCard from './ClassicFundDetailCard';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
@@ -3173,7 +3173,7 @@ function FundDetailDialog({ blockDialogClose, cardDialogRow, getFundCardProps, s
         </DialogHeader>
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-y-styled">
           {cardDialogRow && getFundCardProps ? (
-            <FundCard {...getFundCardProps(cardDialogRow)} layoutMode="drawer" />
+            <ClassicFundDetailCard row={cardDialogRow} getFundCardProps={getFundCardProps} />
           ) : null}
         </div>
       </DialogContent>

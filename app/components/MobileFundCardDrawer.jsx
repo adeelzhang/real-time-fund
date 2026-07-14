@@ -1,7 +1,7 @@
 'use client';
 
 import { Drawer, DrawerClose, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
-import FundCard from './FundCard';
+import ClassicFundDetailCard from './ClassicFundDetailCard';
 import { CloseIcon } from './Icons';
 
 /**
@@ -74,7 +74,7 @@ export default function MobileFundCardDrawer({
           style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))' }}
         >
           {cardSheetRow && getFundCardProps ? (
-            <FundCard {...getFundCardProps(cardSheetRow)} layoutMode="drawer" />
+            <ClassicFundDetailCard row={cardSheetRow} getFundCardProps={getFundCardProps} />
           ) : null}
         </div>
       </DrawerContent>
