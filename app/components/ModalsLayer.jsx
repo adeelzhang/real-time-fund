@@ -164,6 +164,7 @@ function ModalsLayerContent({ callbacksRef }) {
   const setScanModalOpen = (v) => _ms({ scanModalOpen: isFunction(v) ? v(_gs().scanModalOpen) : v });
   const setScanConfirmModalOpen = (v) =>
     _ms({ scanConfirmModalOpen: isFunction(v) ? v(_gs().scanConfirmModalOpen) : v });
+  const setIsScanImporting = (v) => _ms({ isScanImporting: isFunction(v) ? v(_gs().isScanImporting) : v });
 
   return (
     <>
@@ -818,6 +819,10 @@ function ModalsLayerContent({ callbacksRef }) {
           <CloudConfigModal
             type={cloudConfigModal.type}
             onConfirm={cb.current.handleSyncLocalConfig}
+            onClose={() => {
+              if (cb.current.skipSyncRef) cb.current.skipSyncRef.current = false;
+              setCloudConfigModal({ open: false, userId: null, type: null, cloudData: null });
+            }}
             onCancel={() => {
               if (cloudConfigModal.type === 'conflict' && cloudConfigModal.cloudData) {
                 cb.current.applyCloudConfig?.(cloudConfigModal.cloudData);
@@ -897,7 +902,9 @@ function ModalsLayerContent({ callbacksRef }) {
 
       {/* ===== Modal: 扫描导入进度 ===== */}
       <AnimatePresence>
-        {isScanImporting && <ScanImportProgressModal scanImportProgress={scanImportProgress} />}
+        {isScanImporting && (
+          <ScanImportProgressModal scanImportProgress={scanImportProgress} onClose={() => setIsScanImporting(false)} />
+        )}
       </AnimatePresence>
 
       {/* ===== Modal: 登录 ===== */}

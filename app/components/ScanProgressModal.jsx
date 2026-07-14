@@ -10,6 +10,9 @@ export default function ScanProgressModal({ scanProgress, onCancel }) {
       role="dialog"
       aria-modal="true"
       aria-label="识别进度"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onCancel?.();
+      }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -19,6 +22,7 @@ export default function ScanProgressModal({ scanProgress, onCancel }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="glass card modal"
+        onClick={(event) => event.stopPropagation()}
         style={{ width: 340, maxWidth: '90vw', textAlign: 'center', padding: '24px' }}
       >
         <div style={{ marginBottom: 16 }}>

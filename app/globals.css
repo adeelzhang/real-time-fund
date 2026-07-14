@@ -270,10 +270,6 @@ body::before {
   display: none;
 }
 
-.mobile-tab-swipe-surface {
-  overscroll-behavior-x: none;
-}
-
 .page-width-slider {
   -webkit-appearance: none;
   appearance: none;
@@ -2976,7 +2972,7 @@ html::-webkit-scrollbar-thumb:active,
   display: none !important;
 }
 
-/* 基金详情使用实色表面，避免移动端实时计算 backdrop blur。 */
+/* fund-manager 全屏详情使用实色表面；经典浮层详情保留毛玻璃。 */
 .fund-detail-overlay-no-blur {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;

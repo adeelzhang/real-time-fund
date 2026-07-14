@@ -119,12 +119,15 @@ function getEventClientY(e) {
   return Number.isFinite(clientY) ? clientY : null;
 }
 
-function Drawer({ open, ...props }) {
+function Drawer({ open, onOpenChange, ...props }) {
   const scrollLock = useScrollLock(open);
-  const contextValue = React.useMemo(() => ({ ...scrollLock, open: !!open }), [scrollLock, open]);
+  const contextValue = React.useMemo(
+    () => ({ ...scrollLock, open: !!open, onOpenChange }),
+    [scrollLock, open, onOpenChange]
+  );
   return (
     <DrawerScrollLockContext.Provider value={contextValue}>
-      <DrawerPrimitive.Root modal={false} data-slot="drawer" open={open} {...props} />
+      <DrawerPrimitive.Root modal={false} data-slot="drawer" open={open} onOpenChange={onOpenChange} {...props} />
     </DrawerScrollLockContext.Provider>
   );
 }
@@ -141,9 +144,9 @@ function DrawerClose({ ...props }) {
   return <DrawerPrimitive.Close data-slot="drawer-close" {...props} />;
 }
 
-function DrawerOverlay({ className, style, ...props }) {
+function DrawerOverlay({ className, style, onClick, ...props }) {
   const ctx = React.useContext(DrawerScrollLockContext);
-  const { open = false, ...scrollLockProps } = ctx || {};
+  const { open = false, onOpenChange, ...scrollLockProps } = ctx || {};
 
   const overlayRef = React.useRef(null);
 
@@ -160,6 +163,14 @@ function DrawerOverlay({ className, style, ...props }) {
     };
   }, [open]);
 
+  const handleClick = React.useCallback(
+    (event) => {
+      onClick?.(event);
+      if (!event.defaultPrevented) onOpenChange?.(false);
+    },
+    [onClick, onOpenChange]
+  );
+
   // modal={false} 时 vaul 不渲染/隐藏 Overlay，用自定义遮罩 div 保证始终有遮罩；点击遮罩关闭
   return (
     <div
@@ -169,6 +180,7 @@ function DrawerOverlay({ className, style, ...props }) {
       role="button"
       tabIndex={-1}
       aria-label="关闭"
+      onClick={handleClick}
       className={cn(
         'fixed inset-0 z-50 cursor-default bg-[var(--drawer-overlay,rgba(0,0,0,0.45))] backdrop-blur-[6px]',
         'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0',

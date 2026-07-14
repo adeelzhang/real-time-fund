@@ -21,7 +21,6 @@ import { toast as sonnerToast } from 'sonner';
 
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from '@/components/ui/empty';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import Announcement from './components/Announcement';
 import EmptyStateCard from './components/EmptyStateCard';
 import FundCard from './components/FundCard';
 
@@ -4500,7 +4499,6 @@ export default function HomePage() {
         aria-hidden={!mobileHomeTabVisible || undefined}
       >
         <>
-          <Announcement />
           <div className="navbar glass" ref={navbarRef}>
             {refreshing && <div className="loading-bar"></div>}
             <div className={`brand ${isSearchFocused || selectedFunds.length > 0 ? 'search-focused-sibling' : ''}`}>

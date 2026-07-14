@@ -3153,8 +3153,7 @@ function FundDetailDialog({ blockDialogClose, cardDialogRow, getFundCardProps, s
       }}
     >
       <DialogContent
-        overlayClassName="fund-detail-overlay-no-blur"
-        className="fund-detail-surface-flat sm:max-w-2xl max-h-[88vh] flex flex-col p-0 overflow-hidden"
+        className="glass sm:max-w-2xl max-h-[88vh] flex flex-col p-0 overflow-hidden"
         onPointerDownOutside={(e) => {
           if (document.body.hasAttribute('data-photo-viewer-open')) {
             e.preventDefault();

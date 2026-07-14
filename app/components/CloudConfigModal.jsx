@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import ConfirmModal from './ConfirmModal';
 import { CloseIcon, CloudIcon } from './Icons';
 
-export default function CloudConfigModal({ onConfirm, onCancel, type = 'empty' }) {
+export default function CloudConfigModal({ onConfirm, onCancel, onClose, type = 'empty' }) {
   const [pendingAction, setPendingAction] = useState(null); // 'local' | 'cloud' | null
   const isConflict = type === 'conflict';
 
@@ -45,13 +45,19 @@ export default function CloudConfigModal({ onConfirm, onCancel, type = 'empty' }
       ? '此操作会将当前本地配置同步到云端，覆盖云端原有配置，且可能无法恢复，请谨慎操作。'
       : '此操作会使用云端配置覆盖当前本地配置，导致本地修改丢失，且可能无法恢复，请谨慎操作。';
 
+  const handleOverlayClick = (event) => {
+    if (event.target !== event.currentTarget || pendingAction) return;
+    if (isConflict) onClose?.();
+    else onCancel?.();
+  };
+
   return (
     <motion.div
       className="modal-overlay"
       role="dialog"
       aria-modal="true"
       aria-label={isConflict ? '配置冲突提示' : '云端同步提示'}
-      onClick={isConflict ? undefined : onCancel}
+      onClick={handleOverlayClick}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

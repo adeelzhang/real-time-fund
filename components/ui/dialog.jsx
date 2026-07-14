@@ -30,9 +30,13 @@ function Dialog({ open: openProp, defaultOpen, onOpenChange, ...props }) {
     },
     [isControlled, onOpenChange]
   );
+  const contextValue = React.useMemo(
+    () => ({ open: currentOpen, onOpenChange: handleOpenChange }),
+    [currentOpen, handleOpenChange]
+  );
 
   return (
-    <DialogContext.Provider value={{ open: currentOpen }}>
+    <DialogContext.Provider value={contextValue}>
       <DialogPrimitive.Root
         modal={false}
         data-slot="dialog"
@@ -57,8 +61,8 @@ function DialogClose({ ...props }) {
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
-function DialogOverlay({ className, style, ...props }) {
-  const { open } = React.useContext(DialogContext);
+function DialogOverlay({ className, style, onClick, ...props }) {
+  const { open, onOpenChange } = React.useContext(DialogContext);
   const overlayRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -75,6 +79,13 @@ function DialogOverlay({ className, style, ...props }) {
   }, [open]);
 
   const mergedStyle = React.useMemo(() => ({ touchAction: 'none', ...style }), [style]);
+  const handleClick = React.useCallback(
+    (event) => {
+      onClick?.(event);
+      if (!event.defaultPrevented) onOpenChange?.(false);
+    },
+    [onClick, onOpenChange]
+  );
 
   return (
     <div
@@ -84,6 +95,7 @@ function DialogOverlay({ className, style, ...props }) {
       role="button"
       tabIndex={-1}
       aria-label="关闭"
+      onClick={handleClick}
       className={cn(
         'fixed inset-0 z-50 cursor-default bg-[var(--dialog-overlay)] backdrop-blur-[4px] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0',
         className

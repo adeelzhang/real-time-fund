@@ -64,7 +64,7 @@ function QuoteDetailDialog({ quote, onOpenChange }) {
 
   return (
     <Dialog open={Boolean(quote)} onOpenChange={onOpenChange}>
-      <DialogContent className="global-quote-dialog fund-detail-surface-flat sm:max-w-[520px]">
+      <DialogContent className="global-quote-dialog glass sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle>{quote?.name || '行情详情'}</DialogTitle>
         </DialogHeader>

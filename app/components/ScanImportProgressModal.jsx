@@ -2,13 +2,16 @@
 
 import { motion } from 'framer-motion';
 
-export default function ScanImportProgressModal({ scanImportProgress }) {
+export default function ScanImportProgressModal({ scanImportProgress, onClose }) {
   return (
     <motion.div
       className="modal-overlay"
       role="dialog"
       aria-modal="true"
       aria-label="导入进度"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose?.();
+      }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -18,6 +21,7 @@ export default function ScanImportProgressModal({ scanImportProgress }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="glass card modal"
+        onClick={(event) => event.stopPropagation()}
         style={{ width: 320, maxWidth: '90vw', textAlign: 'center', padding: '24px' }}
       >
         <div style={{ marginBottom: 16 }}>
