@@ -5,6 +5,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Globe2, LockKeyhole, RefreshCw } from 'lucide-react';
 import { fetchGlobalQuotes } from '../api/fund';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const GLOBAL_MARKET_SECTIONS = [
+  { id: 'aStock', title: 'A股指数' },
+  { id: 'global', title: '全球市场', note: '“ETF代理”品种并非指数现货' },
+  { id: 'commodity', title: '商品相关 ETF' }
+];
 
 const formatNumber = (value, digits = 2) => {
   const number = Number(value);
@@ -139,9 +146,23 @@ export default function GlobalMarketTab({ isActive, user, onLogin }) {
       </header>
 
       {isPending ? (
-        <div className="global-market-loading" aria-label="正在加载全球行情">
-          {Array.from({ length: 9 }).map((_, index) => (
-            <div className="global-quote-card global-quote-card-skeleton" key={index} />
+        <div className="global-market-loading-sections" aria-label="正在加载全球行情">
+          {GLOBAL_MARKET_SECTIONS.map((section) => (
+            <section className="global-market-section" key={section.id}>
+              <div className="global-market-section-heading">
+                <h2>{section.title}</h2>
+                {section.note ? <span>{section.note}</span> : null}
+              </div>
+              <div className="global-quote-grid">
+                {Array.from({ length: 9 }).map((_, index) => (
+                  <div className="global-quote-card global-quote-card-skeleton" key={index}>
+                    <Skeleton className="global-quote-skeleton-name" />
+                    <Skeleton className="global-quote-skeleton-price" />
+                    <Skeleton className="global-quote-skeleton-change" />
+                  </div>
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       ) : isError ? (
