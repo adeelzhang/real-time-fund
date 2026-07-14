@@ -155,7 +155,7 @@ export default function GlobalMarketTab({ isActive, user, onLogin }) {
               </div>
               <div className="global-quote-grid">
                 {Array.from({ length: 9 }).map((_, index) => (
-                  <div className="global-quote-card global-quote-card-skeleton" key={index}>
+                  <div className="global-quote-card global-quote-card-skeleton glass" key={index}>
                     <Skeleton className="global-quote-skeleton-name" />
                     <Skeleton className="global-quote-skeleton-price" />
                     <Skeleton className="global-quote-skeleton-change" />
@@ -184,7 +184,7 @@ export default function GlobalMarketTab({ isActive, user, onLogin }) {
                 {(group.items || []).map((quote) => (
                   <button
                     type="button"
-                    className={`global-quote-card ${getDeltaClass(quote.pct)}`}
+                    className={`global-quote-card glass ${getDeltaClass(quote.pct)}`}
                     key={quote.code}
                     onClick={() => setSelectedQuote(quote)}
                     aria-label={`查看${quote.name}行情详情`}

@@ -5696,7 +5696,6 @@ html::-webkit-scrollbar-thumb:active,
   border: 1px solid var(--border);
   border-left-width: 3px;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--card) 96%, transparent);
   color: var(--text);
   cursor: pointer;
   text-align: left;
@@ -5708,7 +5707,7 @@ html::-webkit-scrollbar-thumb:active,
 }
 
 .global-quote-card:hover {
-  background: color-mix(in srgb, var(--card) 88%, var(--primary) 12%);
+  border-color: color-mix(in srgb, var(--border) 65%, var(--primary) 35%);
 }
 
 .global-quote-card:active {

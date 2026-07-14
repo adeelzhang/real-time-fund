@@ -302,7 +302,11 @@ function ModalsLayerContent({ callbacksRef }) {
             onNext={(groupId) => {
               const fund = selectHoldingGroupModal.fund;
               setSelectHoldingGroupModal({ open: false, fund: null });
-              setActionModal({ open: true, fund, groupId });
+              if (selectHoldingGroupModal.nextAction === 'edit') {
+                setHoldingModal({ open: true, fund, groupId });
+              } else {
+                setActionModal({ open: true, fund, groupId });
+              }
             }}
           />
         )}

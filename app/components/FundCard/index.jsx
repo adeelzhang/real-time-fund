@@ -674,7 +674,11 @@ export default function Index({
                       gap: 4
                     }}
                     onClick={() => {
-                      onActionClick?.(f);
+                      if (layoutMode === 'drawer') {
+                        onHoldingClick?.(f);
+                      } else {
+                        onActionClick?.(f);
+                      }
                     }}
                   >
                     <span className="label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>

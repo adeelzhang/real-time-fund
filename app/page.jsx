@@ -4201,7 +4201,12 @@ export default function HomePage() {
     (fund) => {
       const code = fund?.code;
       if ((currentTab === 'all' || currentTab === 'fav') && code && linkedHoldingsForAllFav.linked?.has?.(code)) {
-        setSelectHoldingGroupModal({ open: true, fund });
+        const sourceGroupIds = linkedHoldingsForAllFav.groupIdsByCode?.[code] || [];
+        if (sourceGroupIds.length === 1) {
+          setHoldingModal({ open: true, fund, groupId: sourceGroupIds[0] });
+        } else {
+          setSelectHoldingGroupModal({ open: true, fund, nextAction: 'edit' });
+        }
         return;
       }
 
@@ -4271,7 +4276,7 @@ export default function HomePage() {
     (fund) => {
       const code = fund?.code;
       if ((currentTab === 'all' || currentTab === 'fav') && code && linkedHoldingsForAllFav.linked?.has?.(code)) {
-        setSelectHoldingGroupModal({ open: true, fund });
+        setSelectHoldingGroupModal({ open: true, fund, nextAction: 'action' });
         return;
       }
       setActionModal({ open: true, fund });

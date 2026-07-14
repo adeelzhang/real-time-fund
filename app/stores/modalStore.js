@@ -12,7 +12,7 @@ const DEFAULTS = {
   convertModal: { open: false, fundCode: null, groupId: undefined },
   dividendMethodModal: { open: false, fundCode: null, groupId: undefined },
   selectFundSingleModal: { open: false, excludeCodes: [], initialSelectedCode: '', _nonce: null },
-  selectHoldingGroupModal: { open: false, fundCode: null },
+  selectHoldingGroupModal: { open: false, fundCode: null, nextAction: 'action' },
   dataSourceModal: { open: false, fundCode: null },
   dcaModal: { open: false, fundCode: null, groupId: undefined },
   historyModal: { open: false, fundCode: null, groupId: undefined },
