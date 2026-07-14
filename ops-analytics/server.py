@@ -550,6 +550,7 @@ def hourly_series(conn, end_dt):
         series.append(
             {
                 "label": dt.astimezone(tz).strftime("%H:00"),
+                "date": dt.astimezone(tz).strftime("%Y-%m-%d %H:00"),
                 "pv": int(row["pv"]) if row else 0,
                 "uv": int(row["uv"]) if row else 0,
             }
@@ -1016,10 +1017,66 @@ OPS_HTML = r"""<!doctype html>
     .amber { color: var(--amber); } .violet { color: var(--violet); }
     .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-top: 12px; }
     .panel { padding: 16px; min-width: 0; }
-    .panel h2 { margin: 0 0 12px; font-size: 15px; }
-    .bars { display: grid; grid-template-columns: repeat(24, minmax(8px, 1fr)); gap: 4px; height: 180px; align-items: end; }
-    .bar { min-height: 2px; border-radius: 4px 4px 0 0; background: var(--blue); opacity: .86; }
-    .bar.uv { background: var(--green); opacity: .72; }
+    .panel h2 { margin: 0; font-size: 15px; }
+    .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    .chart-meta { margin-top: 3px; color: var(--muted); font-size: 12px; }
+    .chart-range {
+      display: inline-flex;
+      flex: 0 0 auto;
+      padding: 3px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+    .chart-range button {
+      height: 30px;
+      padding: 0 11px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .chart-range button.active { background: var(--text); color: #fff; }
+    .chart-legend { display: flex; align-items: center; gap: 16px; margin-top: 14px; color: var(--muted); font-size: 12px; }
+    .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .chart-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); }
+    .chart-dot.uv { background: var(--green); }
+    .chart-wrap { position: relative; width: 100%; min-height: 300px; margin-top: 4px; }
+    .traffic-chart { display: block; width: 100%; height: 300px; overflow: visible; touch-action: pan-y; }
+    .chart-grid-line { stroke: #e5eaf1; stroke-width: 1; }
+    .chart-axis-label { fill: var(--muted); font-size: 11px; }
+    .chart-line { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    .chart-line.pv { stroke: var(--blue); }
+    .chart-line.uv { stroke: var(--green); }
+    .chart-crosshair { stroke: #94a3b8; stroke-width: 1; stroke-dasharray: 4 4; opacity: 0; }
+    .chart-focus-dot { stroke: #fff; stroke-width: 2; opacity: 0; }
+    .chart-focus-dot.pv { fill: var(--blue); }
+    .chart-focus-dot.uv { fill: var(--green); }
+    .chart-tooltip {
+      position: absolute;
+      z-index: 2;
+      display: flex;
+      min-width: 132px;
+      padding: 9px 10px;
+      flex-direction: column;
+      gap: 3px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .96);
+      box-shadow: 0 10px 28px rgba(15, 23, 42, .14);
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, -100%);
+      transition: opacity .12s ease;
+    }
+    .chart-tooltip.visible { opacity: 1; }
+    .chart-tooltip strong { font-size: 12px; }
+    .chart-tooltip span { color: var(--muted); font-size: 12px; }
+    .chart-tooltip .pv-value { color: var(--blue); }
+    .chart-tooltip .uv-value { color: var(--green); }
+    .chart-empty { fill: var(--muted); font-size: 13px; text-anchor: middle; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
     th { color: var(--muted); font-size: 12px; font-weight: 650; }
@@ -1037,6 +1094,11 @@ OPS_HTML = r"""<!doctype html>
       .metrics { grid-template-columns: 1fr; }
       input { min-width: 100%; width: 100%; }
       .toolbar { width: 100%; }
+      .panel-heading { align-items: stretch; flex-direction: column; gap: 10px; }
+      .chart-range { width: 100%; }
+      .chart-range button { flex: 1; }
+      .chart-wrap { min-height: 250px; }
+      .traffic-chart { height: 250px; }
     }
   </style>
 </head>
@@ -1065,8 +1127,28 @@ OPS_HTML = r"""<!doctype html>
 
     <section class="grid">
       <div class="panel">
-        <h2>最近 24 小时 PV/UV</h2>
-        <div class="bars" id="hourlyBars"></div>
+        <div class="panel-heading">
+          <div>
+            <h2>PV / UV 访问趋势</h2>
+            <div class="chart-meta" id="chartMeta">最近 24 小时 · 按小时统计</div>
+          </div>
+          <div class="chart-range" role="group" aria-label="趋势时间范围">
+            <button type="button" class="active" data-chart-range="hourly" aria-pressed="true">24 小时</button>
+            <button type="button" data-chart-range="daily" aria-pressed="false">30 天</button>
+          </div>
+        </div>
+        <div class="chart-legend" aria-hidden="true">
+          <span><i class="chart-dot"></i>PV 访问量</span>
+          <span><i class="chart-dot uv"></i>UV 访客量</span>
+        </div>
+        <div class="chart-wrap" id="trafficChartWrap">
+          <svg class="traffic-chart" id="trafficChart" role="img" aria-label="PV 和 UV 访问趋势"></svg>
+          <div class="chart-tooltip" id="chartTooltip">
+            <strong id="chartTooltipLabel"></strong>
+            <span class="pv-value" id="chartTooltipPv"></span>
+            <span class="uv-value" id="chartTooltipUv"></span>
+          </div>
+        </div>
       </div>
       <div class="panel">
         <h2>Top 页面</h2>
@@ -1090,6 +1172,15 @@ OPS_HTML = r"""<!doctype html>
     const fmt = (n) => Number(n || 0).toLocaleString('zh-CN');
     const passwordInput = $('password');
     let timer = null;
+    let chartResizeFrame = null;
+    const chartState = {
+      range: 'hourly',
+      series: { hourly: [], daily: [] },
+      rows: [],
+      width: 0,
+      height: 0,
+      points: { pv: [], uv: [] }
+    };
 
     function setStatus(text) { $('status').textContent = text; }
     function setRows(id, rows, render) {
@@ -1099,12 +1190,137 @@ OPS_HTML = r"""<!doctype html>
     function escapeHtml(s) {
       return String(s || '').replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
     }
-    function renderBars(rows) {
-      const max = Math.max(1, ...rows.map((x) => x.pv));
-      $('hourlyBars').innerHTML = rows.map((x) => {
-        const h = Math.max(2, Math.round((x.pv / max) * 170));
-        return `<div class="bar" title="${escapeHtml(x.label)} PV ${fmt(x.pv)} / UV ${fmt(x.uv)}" style="height:${h}px"></div>`;
+    function niceMax(value) {
+      if (!Number.isFinite(value) || value <= 0) return 1;
+      const magnitude = 10 ** Math.floor(Math.log10(value));
+      const normalized = value / magnitude;
+      const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+      return step * magnitude;
+    }
+    function smoothPath(points) {
+      if (!points.length) return '';
+      if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+      let path = `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
+      for (let index = 1; index < points.length; index += 1) {
+        const previous = points[index - 1];
+        const current = points[index];
+        const middleX = (previous.x + current.x) / 2;
+        path += ` C ${middleX.toFixed(2)} ${previous.y.toFixed(2)}, ${middleX.toFixed(2)} ${current.y.toFixed(2)}, ${current.x.toFixed(2)} ${current.y.toFixed(2)}`;
+      }
+      return path;
+    }
+    function renderChart() {
+      const wrap = $('trafficChartWrap');
+      const svg = $('trafficChart');
+      const rows = chartState.series[chartState.range] || [];
+      const width = Math.max(300, Math.round(wrap.clientWidth || 720));
+      const height = width < 560 ? 250 : 300;
+      const padding = { top: 18, right: 16, bottom: 34, left: 44 };
+      const plotWidth = width - padding.left - padding.right;
+      const plotHeight = height - padding.top - padding.bottom;
+
+      chartState.rows = rows;
+      chartState.width = width;
+      chartState.height = height;
+      svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+      if (!rows.length) {
+        chartState.points = { pv: [], uv: [] };
+        svg.innerHTML = `<text class="chart-empty" x="${width / 2}" y="${height / 2}">暂无趋势数据</text>`;
+        return;
+      }
+
+      const maxValue = niceMax(Math.max(...rows.flatMap((row) => [Number(row.pv || 0), Number(row.uv || 0)])));
+      const xAt = (index) => padding.left + (rows.length === 1 ? plotWidth / 2 : (index / (rows.length - 1)) * plotWidth);
+      const yAt = (value) => padding.top + plotHeight - (Number(value || 0) / maxValue) * plotHeight;
+      const pvPoints = rows.map((row, index) => ({ x: xAt(index), y: yAt(row.pv) }));
+      const uvPoints = rows.map((row, index) => ({ x: xAt(index), y: yAt(row.uv) }));
+      chartState.points = { pv: pvPoints, uv: uvPoints };
+
+      const gridLines = [];
+      for (let index = 0; index <= 4; index += 1) {
+        const value = (maxValue * index) / 4;
+        const y = yAt(value);
+        gridLines.push(`<line class="chart-grid-line" x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}"></line>`);
+        gridLines.push(`<text class="chart-axis-label" x="${padding.left - 8}" y="${y + 4}" text-anchor="end">${escapeHtml(fmt(value))}</text>`);
+      }
+
+      const labelEvery = rows.length > 24 ? 5 : rows.length > 12 ? 4 : 1;
+      const xLabels = rows.map((row, index) => {
+        if (index !== 0 && index !== rows.length - 1 && index % labelEvery !== 0) return '';
+        return `<text class="chart-axis-label" x="${xAt(index)}" y="${height - 9}" text-anchor="middle">${escapeHtml(row.label)}</text>`;
       }).join('');
+      const description = rows.map((row) => `${row.date || row.label} PV ${fmt(row.pv)} UV ${fmt(row.uv)}`).join('；');
+
+      svg.innerHTML = `
+        <title>${chartState.range === 'hourly' ? '最近 24 小时' : '最近 30 天'} PV 和 UV 访问趋势</title>
+        <desc>${escapeHtml(description)}</desc>
+        ${gridLines.join('')}
+        ${xLabels}
+        <path class="chart-line pv" d="${smoothPath(pvPoints)}"></path>
+        <path class="chart-line uv" d="${smoothPath(uvPoints)}"></path>
+        <line class="chart-crosshair" id="chartCrosshair" y1="${padding.top}" y2="${padding.top + plotHeight}"></line>
+        <circle class="chart-focus-dot pv" id="chartFocusPv" r="5"></circle>
+        <circle class="chart-focus-dot uv" id="chartFocusUv" r="5"></circle>
+      `;
+    }
+    function hideChartTooltip() {
+      $('chartTooltip').classList.remove('visible');
+      const crosshair = $('chartCrosshair');
+      const pvDot = $('chartFocusPv');
+      const uvDot = $('chartFocusUv');
+      if (crosshair) crosshair.style.opacity = '0';
+      if (pvDot) pvDot.style.opacity = '0';
+      if (uvDot) uvDot.style.opacity = '0';
+    }
+    function showChartTooltip(event) {
+      const rows = chartState.rows;
+      if (!rows.length) return;
+      const svg = $('trafficChart');
+      const rect = svg.getBoundingClientRect();
+      const viewX = ((event.clientX - rect.left) / rect.width) * chartState.width;
+      const left = 44;
+      const right = 16;
+      const plotWidth = chartState.width - left - right;
+      const index = Math.max(0, Math.min(rows.length - 1, Math.round(((viewX - left) / plotWidth) * (rows.length - 1))));
+      const row = rows[index];
+      const pvPoint = chartState.points.pv[index];
+      const uvPoint = chartState.points.uv[index];
+      const crosshair = $('chartCrosshair');
+      const pvDot = $('chartFocusPv');
+      const uvDot = $('chartFocusUv');
+
+      crosshair.setAttribute('x1', pvPoint.x);
+      crosshair.setAttribute('x2', pvPoint.x);
+      crosshair.style.opacity = '1';
+      pvDot.setAttribute('cx', pvPoint.x);
+      pvDot.setAttribute('cy', pvPoint.y);
+      pvDot.style.opacity = '1';
+      uvDot.setAttribute('cx', uvPoint.x);
+      uvDot.setAttribute('cy', uvPoint.y);
+      uvDot.style.opacity = '1';
+
+      $('chartTooltipLabel').textContent = row.date || row.label;
+      $('chartTooltipPv').textContent = `PV ${fmt(row.pv)}`;
+      $('chartTooltipUv').textContent = `UV ${fmt(row.uv)}`;
+      const tooltip = $('chartTooltip');
+      const pointLeft = (pvPoint.x / chartState.width) * rect.width;
+      const pointTop = (Math.min(pvPoint.y, uvPoint.y) / chartState.height) * rect.height;
+      tooltip.style.left = `${Math.max(76, Math.min(rect.width - 76, pointLeft))}px`;
+      tooltip.style.top = `${Math.max(58, pointTop - 8)}px`;
+      tooltip.classList.add('visible');
+    }
+    function selectChartRange(range) {
+      if (!['hourly', 'daily'].includes(range)) return;
+      chartState.range = range;
+      document.querySelectorAll('[data-chart-range]').forEach((button) => {
+        const active = button.dataset.chartRange === range;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+      $('chartMeta').textContent = range === 'hourly' ? '最近 24 小时 · 按小时统计' : '最近 30 天 · 按日统计';
+      hideChartTooltip();
+      renderChart();
     }
     async function load() {
       const password = passwordInput.value;
@@ -1138,7 +1354,8 @@ OPS_HTML = r"""<!doctype html>
         registeredEl.classList.add('small');
         registeredSubEl.textContent = registered.error || '需要服务端密钥';
       }
-      renderBars(data.series.hourly || []);
+      chartState.series = data.series || { hourly: [], daily: [] };
+      renderChart();
       setRows('topPages', data.topPages || [], (x) => `<tr><td>${escapeHtml(x.path)}</td><td>${fmt(x.pv)}</td><td>${fmt(x.uv)}</td></tr>`);
       setRows('topReferrers', data.topReferrers || [], (x) => `<tr><td>${escapeHtml(x.referrer)}</td><td>${fmt(x.pv)}</td></tr>`);
       setRows('latest', data.latest || [], (x) => `<tr><td>${new Date(x.ts * 1000).toLocaleString('zh-CN')}</td><td>${escapeHtml(x.event_type)}</td><td>${escapeHtml(x.path)}</td></tr>`);
@@ -1147,6 +1364,20 @@ OPS_HTML = r"""<!doctype html>
     }
     $('save').addEventListener('click', load);
     $('refresh').addEventListener('click', load);
+    document.querySelectorAll('[data-chart-range]').forEach((button) => {
+      button.addEventListener('click', () => selectChartRange(button.dataset.chartRange));
+    });
+    $('trafficChart').addEventListener('pointermove', showChartTooltip);
+    $('trafficChart').addEventListener('pointerleave', hideChartTooltip);
+    $('trafficChart').addEventListener('pointercancel', hideChartTooltip);
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(() => {
+        window.cancelAnimationFrame(chartResizeFrame);
+        chartResizeFrame = window.requestAnimationFrame(renderChart);
+      }).observe($('trafficChartWrap'));
+    } else {
+      window.addEventListener('resize', renderChart);
+    }
     passwordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
   </script>
 </body>
