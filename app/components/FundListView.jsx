@@ -93,7 +93,6 @@ const FundListView = React.memo(function FundListView({
             <PcFundTable
               stickyTop={navbarHeight + filterBarHeight}
               data={pcFundTableData}
-              relatedSectorSessionKey={userId ?? ''}
               currentTab={currentTab}
               groups={groups}
               favorites={favorites}
@@ -132,7 +131,6 @@ const FundListView = React.memo(function FundListView({
           {viewMode === 'list' && isMobile && (
             <MobileFundTable
               data={pcFundTableData}
-              relatedSectorSessionKey={userId ?? ''}
               currentTab={currentTab}
               groups={groups}
               onMoveFunds={handleMoveFunds}

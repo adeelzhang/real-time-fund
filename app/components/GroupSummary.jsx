@@ -299,7 +299,7 @@ export default function GroupSummary({
                   gap: 2
                 }}
               >
-                当日收益{showTodayPercent ? '(%)' : ''} <SwitchIcon style={{ opacity: 0.4 }} />
+                今日收益{showTodayPercent ? '(%)' : ''} <SwitchIcon style={{ opacity: 0.4 }} />
               </div>
               <div
                 className={

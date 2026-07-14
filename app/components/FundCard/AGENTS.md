@@ -6,9 +6,9 @@ The `FundCard` component (`app/components/FundCard/index.jsx`) is the core UI el
 
 ## KEY RESPONSIBILITIES
 
-- **Fund Identity & Status**: Displays the fund name, code, related sector, DCA (定投) indicator, update status, and user-defined tags.
+- **Fund Identity & Status**: Displays the fund name, code, DCA (定投) indicator, update status, and user-defined tags.
 - **Real-Time Data**: Shows the latest net value (最新净值), estimated net value (估值净值), and corresponding percentage changes.
-- **Personal Performance**: Computes and shows holding amount, cost net value, total profit/loss (持有收益), and daily earnings (当日收益). Supports toggling between amount and percentage modes.
+- **Personal Performance**: Computes and shows holding amount, cost net value, total profit/loss (持有收益), and daily earnings (今日收益). Supports toggling between amount and percentage modes.
 - **Data Visualization**: Integrates with sub-components:
   - `FundIntradayChart` for intraday valuation curves.
   - `FundTrendChart` for historical net value trends and transaction markers.

@@ -35,6 +35,18 @@ const CHART_COLORS = {
   }
 };
 
+const CHINA_MARKET_AXIS_LABELS = new Set(['09:30', '11:30', '13:00', '15:00']);
+const CHINA_MARKET_FULL_TIMES = Array.from({ length: 15 * 60 - (9 * 60 + 30) + 1 }, (_, index) => {
+  const minutes = 9 * 60 + 30 + index;
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+});
+
+const normalizeTimeLabel = (value) => {
+  const match = String(value || '').match(/(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  return `${match[1].padStart(2, '0')}:${match[2]}`;
+};
+
 function getChartThemeColors(theme) {
   return CHART_COLORS[theme] || CHART_COLORS.dark;
 }
@@ -108,13 +120,38 @@ export default function FundIntradayChart({
 
   const actuallyShowImageChart = showImageChartPreference && isFundgzToday && ocrVerified;
 
+  const normalizedSeries = useMemo(
+    () =>
+      series
+        .map((point) => ({ ...point, time: normalizeTimeLabel(point?.time) }))
+        .filter((point) => point.time && Number.isFinite(Number(point.value))),
+    [series]
+  );
+
+  const usesFullChinaMarketAxis = useMemo(() => {
+    if (normalizedSeries.length === 0) return false;
+    const minutes = normalizedSeries.map((point) => {
+      const [hour, minute] = point.time.split(':').map(Number);
+      return hour * 60 + minute;
+    });
+    return Math.min(...minutes) >= 9 * 60 + 15 && Math.max(...minutes) <= 15 * 60 + 5;
+  }, [normalizedSeries]);
+
   const chartData = useMemo(() => {
-    if (!series.length) return { labels: [], datasets: [] };
-    const labels = series.map((d) => d.time);
-    const values = series.map((d) => d.value);
-    const ref = referenceNav != null && Number.isFinite(Number(referenceNav)) ? Number(referenceNav) : values[0];
-    const percentages = values.map((v) => (ref ? ((v - ref) / ref) * 100 : 0));
-    const lastPct = percentages[percentages.length - 1];
+    if (!normalizedSeries.length) return { labels: [], datasets: [] };
+    const valueByTime = new Map(normalizedSeries.map((point) => [point.time, Number(point.value)]));
+    const labels = usesFullChinaMarketAxis
+      ? CHINA_MARKET_FULL_TIMES
+      : [...new Set(normalizedSeries.map((point) => point.time))];
+    const fallbackReference = Number(normalizedSeries[0]?.value);
+    const ref =
+      referenceNav != null && Number.isFinite(Number(referenceNav)) ? Number(referenceNav) : fallbackReference;
+    const percentages = labels.map((time) => {
+      const value = valueByTime.get(time);
+      return value != null && ref ? ((value - ref) / ref) * 100 : null;
+    });
+    const validPercentages = percentages.filter((value) => value != null && Number.isFinite(value));
+    const lastPct = validPercentages[validPercentages.length - 1];
     const riseColor = chartColors.danger;
     const fallColor = chartColors.success;
     const lineColor = lastPct != null && lastPct >= 0 ? riseColor : fallColor;
@@ -135,14 +172,15 @@ export default function FundIntradayChart({
             return gradient;
           },
           borderWidth: 2,
-          pointRadius: series.length <= 2 ? 3 : 0,
+          pointRadius: normalizedSeries.length <= 2 ? 3 : 0,
           pointHoverRadius: 4,
+          spanGaps: false,
           fill: true,
           tension: 0.2
         }
       ]
     };
-  }, [series, referenceNav, chartColors.danger, chartColors.success]);
+  }, [normalizedSeries, referenceNav, chartColors.danger, chartColors.success, usesFullChinaMarketAxis]);
 
   const options = useMemo(() => {
     const colors = getChartThemeColors(theme);
@@ -166,7 +204,17 @@ export default function FundIntradayChart({
           ticks: {
             color: colors.muted,
             font: { size: 10 },
-            maxTicksLimit: 6
+            ...(usesFullChinaMarketAxis
+              ? {
+                  autoSkip: false,
+                  minRotation: 0,
+                  maxRotation: 0,
+                  callback(value) {
+                    const label = this.getLabelForValue(value);
+                    return CHINA_MARKET_AXIS_LABELS.has(label) ? label : '';
+                  }
+                }
+              : { maxTicksLimit: 6 })
           }
         },
         y: {
@@ -225,7 +273,7 @@ export default function FundIntradayChart({
         }
       }
     };
-  }, [theme]);
+  }, [theme, usesFullChinaMarketAxis]);
 
   useEffect(() => {
     return () => {

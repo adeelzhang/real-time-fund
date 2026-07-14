@@ -29,11 +29,11 @@ export const SORT_DISPLAY_MODES = new Set(['buttons', 'dropdown']);
 /** 排序规则的默认配置 */
 export const DEFAULT_SORT_RULES = [
   { id: 'default', label: '默认', enabled: true },
-  { id: 'yield', label: '估算涨幅', alias: '涨跌幅', enabled: true },
-  { id: 'yesterdayIncrease', label: '最新涨幅', enabled: false },
+  { id: 'yield', label: '实时估值', alias: '涨跌幅', enabled: true },
+  { id: 'yesterdayIncrease', label: '最近涨幅', enabled: false },
   { id: 'holdingAmount', label: '持仓金额', enabled: false },
   { id: 'holdingRatio', label: '持仓占比', enabled: false },
-  { id: 'todayProfit', label: '当日收益', enabled: false },
+  { id: 'todayProfit', label: '今日收益', enabled: false },
   { id: 'yesterdayProfit', label: '昨日收益', enabled: false },
   { id: 'holdingDays', label: '持有天数', enabled: false },
   { id: 'holding', label: '持有收益', enabled: true },
@@ -158,7 +158,7 @@ export const SCAN_LOADING_TIPS_MOBILE = [
   '💡 小贴士：可在设置中减少动态样式效果，以提升低性能设备上的流畅度。',
   '💡 小贴士：自动数据源基于历史估值走势与业绩走势线段拟合程度来选择最优数据源。',
   '💡 小贴士：表格模式下，点击基金名称下方的持仓金额可以触发【持仓操作】弹框。',
-  '💡 小贴士：表格模式下，当日收益下方展示的百分比为收益率。',
+  '💡 小贴士：表格模式下，今日收益下方展示的百分比为收益率。',
   '💡 小贴士：排序个性化设置可以同时控制卡片和表格模式的排序'
 ];
 
@@ -168,7 +168,7 @@ export const SCAN_LOADING_TIPS_PC = [
   '💡 小贴士：如果觉得页面性能卡顿，可以在右上角全局设置中选择【减少动态样式效果】。',
   '💡 小贴士：可在设置中减少动态样式效果，以提升低性能设备上的流畅度。',
   '💡 小贴士：自动数据源基于历史估值走势与业绩走势线段拟合程度来选择最优数据源。',
-  '💡 小贴士：表格模式下，当日收益下方展示的百分比为收益率。',
+  '💡 小贴士：表格模式下，今日收益下方展示的百分比为收益率。',
   '💡 小贴士：排序个性化设置可以同时控制卡片和表格模式的排序',
   '💡 小贴士：页面最左侧存在导航栏，鼠标悬浮上去就会展示出来'
 ];

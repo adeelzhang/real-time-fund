@@ -266,7 +266,7 @@ export default function GroupAccountSummaryCard({
         </div>
         <div style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
           <div className="muted" style={{ fontSize: 12, marginBottom: 2 }}>
-            当日收益
+            今日收益
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <span

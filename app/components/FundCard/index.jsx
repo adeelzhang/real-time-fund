@@ -362,15 +362,6 @@ export default function Index({
   if (!f) return null;
 
   const showFavoriteButton = currentTab === 'all' || currentTab === 'fav';
-  const relatedSectorRaw = f?.relatedSector != null ? String(f.relatedSector).trim() : '';
-  const relatedSectorQuoteName = f?.relatedSectorQuoteName != null ? String(f.relatedSectorQuoteName).trim() : '';
-  const relatedSectorDisplay = relatedSectorQuoteName || relatedSectorRaw;
-  const relatedSectorPctValue = f?.relatedSectorQuotePct == null ? null : Number(f.relatedSectorQuotePct);
-  const hasRelatedSectorPct = relatedSectorPctValue != null && Number.isFinite(relatedSectorPctValue);
-  const relatedSectorPctText = hasRelatedSectorPct
-    ? `${relatedSectorPctValue > 0 ? '+' : ''}${relatedSectorPctValue.toFixed(2)}%`
-    : '';
-
   const holdingLocked = (currentTab === 'all' || currentTab === 'fav') && isHoldingLinked;
   const holdingLinkedTitle = '持仓来自自定义分组汇总，点击选择分组后操作';
 
@@ -618,7 +609,7 @@ export default function Index({
 
               if (shouldHideChange) return null;
 
-              const changeLabel = hasTodayData ? '涨跌幅' : '最新涨幅';
+              const changeLabel = hasTodayData ? '涨跌幅' : '最近涨幅';
               return (
                 <Stat
                   label={changeLabel}
@@ -632,46 +623,13 @@ export default function Index({
               value={f.gsz != null && !isNaN(Number(f.gsz)) ? Number(f.gsz).toFixed(4) : (f.gsz ?? '—')}
             />
             <Stat
-              label="估算涨幅"
+              label="实时估值"
               value={isNumber(f.gszzl) ? `${f.gszzl > 0 ? '+' : ''}${f.gszzl.toFixed(2)}%` : (f.gszzl ?? '—')}
               delta={Number(f.gszzl) || 0}
             />
           </>
         )}
       </div>
-
-      {(relatedSectorDisplay || hasRelatedSectorPct) && (
-        <div className="row" style={{ marginBottom: 12 }}>
-          {relatedSectorDisplay ? (
-            <div className="stat" style={{ flexDirection: 'column', gap: 4, minWidth: 0 }}>
-              <span className="label">关联板块</span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    className="value"
-                    style={{
-                      fontSize: '15px',
-                      lineHeight: 1.2,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      maxWidth: '100%'
-                    }}
-                  >
-                    {relatedSectorDisplay}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{relatedSectorDisplay}</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          ) : null}
-          {hasRelatedSectorPct ? (
-            <Stat label="关联涨幅" value={relatedSectorPctText} delta={relatedSectorPctValue} />
-          ) : null}
-        </div>
-      )}
 
       {isAdded && (
         <div className="row" style={{ marginBottom: 12 }}>
@@ -755,7 +713,7 @@ export default function Index({
                 }}
               >
                 <span className="label" style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  当日收益{todayPercentModes?.[f.code] ? '(%)' : ''}
+                  今日收益{todayPercentModes?.[f.code] ? '(%)' : ''}
                   {profit.profitToday != null && <SwitchIcon />}
                 </span>
                 {profit.profitToday != null ? (

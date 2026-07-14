@@ -40,12 +40,7 @@ import {
   TrashIcon
 } from './Icons';
 import { ConsecutiveTrendBadge } from './Common';
-import {
-  fetchFundPeriodReturns,
-  fetchRelatedSectorsBatch,
-  fetchFundSecidsBatch,
-  fetchEastmoneySectorQuotesBatch
-} from '@/app/api/fund';
+import { fetchFundPeriodReturns } from '@/app/api/fund';
 import { storageStore } from '../stores';
 import { asyncPool } from '@/app/lib/asyncHelper';
 import { Badge } from '@/components/ui/badge';
@@ -72,7 +67,6 @@ const MOBILE_TAGS_COLUMN_ID = 'tags';
 const MOBILE_NON_FROZEN_COLUMN_IDS = [
   'dataSource',
   'tags',
-  'relatedSector',
   'yesterdayChangePercent',
   'estimateChangePercent',
   'sinceAddedChangePercent',
@@ -104,7 +98,6 @@ const MOBILE_COLUMNS_DEFAULT_HIDDEN_IF_PERSONALIZED = new Set([
 
 const MOBILE_COLUMN_HEADERS = {
   dataSource: '数据源',
-  relatedSector: '关联板块',
   period1w: '近1周',
   period1m: '近1月',
   period3m: '近3月',
@@ -112,15 +105,15 @@ const MOBILE_COLUMN_HEADERS = {
   period1y: '近1年',
   latestNav: '最新净值',
   estimateNav: '估算净值',
-  yesterdayChangePercent: '最新涨幅',
-  estimateChangePercent: '估算涨幅',
+  yesterdayChangePercent: '最近涨幅',
+  estimateChangePercent: '实时估值',
   sinceAddedChangePercent: '自添加来',
   totalChangePercent: '估算收益',
   holdingCost: '持仓成本',
   holdingRatio: '持仓占比',
   costNav: '成本净值',
   holdingDays: '持有天数',
-  todayProfit: '当日收益',
+  todayProfit: '今日收益',
   yesterdayProfit: '昨日收益',
   holdingProfit: '持有收益',
   tags: '基金标签'
@@ -375,8 +368,6 @@ const MemoizedMobileTableRow = memo(
     isSelected,
     masked,
     periodReturns,
-    relatedSector,
-    sectorQuote,
     fundExtraData,
     tableColumnOrder,
     tableColumnVisibility,
@@ -509,8 +500,6 @@ const MemoizedMobileTableRow = memo(
       prevProps.isSelected === nextProps.isSelected &&
       prevProps.masked === nextProps.masked &&
       prevProps.periodReturns === nextProps.periodReturns &&
-      prevProps.relatedSector === nextProps.relatedSector &&
-      prevProps.sectorQuote === nextProps.sectorQuote &&
       prevProps.fundExtraData === nextProps.fundExtraData &&
       prevProps.tableColumnOrder === nextProps.tableColumnOrder &&
       prevProps.tableColumnVisibility === nextProps.tableColumnVisibility &&
@@ -536,7 +525,6 @@ MemoizedMobileTableRow.displayName = 'MemoizedMobileTableRow';
  * @param {(oldIndex: number, newIndex: number) => void} [props.onReorder] - 编辑模式下「拖动」列排序回调
  * @param {(row: any) => Object} [props.getFundCardProps] - 给定行返回 FundCard 的 props；传入后点击基金名称将用底部弹框展示卡片视图
  * @param {boolean} [props.masked] - 是否隐藏持仓相关金额
- * @param {string} [props.relatedSectorSessionKey] - 登录用户 id（未登录传空），用于关联板块查询缓存与登录后重新拉取
  * @param {(codes: string[]) => boolean|void} [props.onRemoveFunds] - 批量删除（与 PcFundTable 一致）；返回 false 表示父级已弹出二次确认，勿退出编辑态
  * @param {React.MutableRefObject<(() => void) | null>} [props.batchSelectionClearRef] - 父级批量删除二次确认成功后调用，用于退出移动端编辑态
  * @param {Array<{ id: string; name?: string; codes?: string[] }>} [props.groups] - 自定义分组列表（移动分组弹框用）
@@ -566,7 +554,6 @@ const MobileFundTable = memo(function MobileFundTable({
   getFundCardProps,
   closeDrawerRef,
   masked = false,
-  relatedSectorSessionKey = '',
   onRemoveFunds,
   batchSelectionClearRef,
   onFundCardDrawerOpenChange,
@@ -1165,7 +1152,6 @@ const MobileFundTable = memo(function MobileFundTable({
     [EDIT_MOVE_TO_FRONT_COL]: 72,
     [EDIT_DRAG_COL]: 72,
     tags: 120,
-    relatedSector: 120,
     period1w: 72,
     period1m: 72,
     period3m: 72,
@@ -1184,144 +1170,6 @@ const MobileFundTable = memo(function MobileFundTable({
     holdingCost: 80,
     costNav: 64
   };
-
-  const relatedSectorEnabled = mobileColumnVisibility?.relatedSector !== false;
-  const relatedSectorCacheRef = useRef(new Map());
-  const [relatedSectorByCode, setRelatedSectorByCode] = useState({});
-  const [sectorQuoteByLabel, setSectorQuoteByLabel] = useState({});
-
-  const sectorAuthSegment = relatedSectorSessionKey || 'anon';
-
-  useEffect(() => {
-    relatedSectorCacheRef.current.clear();
-    setRelatedSectorByCode({});
-    setSectorQuoteByLabel({});
-  }, [sectorAuthSegment]);
-
-  useEffect(() => {
-    if (!relatedSectorEnabled) return;
-    if (!isArray(data) || data.length === 0) return;
-
-    const codes = Array.from(new Set(data.map((d) => d?.code).filter(Boolean)));
-    const missing = codes.filter((code) => !relatedSectorCacheRef.current.has(code));
-    if (missing.length === 0) return;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const batchResults = await fetchRelatedSectorsBatch(missing, { authSegment: sectorAuthSegment });
-        if (cancelled) return;
-
-        Object.entries(batchResults).forEach(([code, value]) => {
-          relatedSectorCacheRef.current.set(code, value);
-        });
-
-        setRelatedSectorByCode((prev) => {
-          let changed = false;
-          const next = { ...prev };
-          for (const [code, value] of Object.entries(batchResults)) {
-            if (next[code] === value) continue;
-            next[code] = value;
-            changed = true;
-          }
-          return changed ? next : prev;
-        });
-      } catch (e) {
-        console.error('Fetch related sectors batch error (mobile):', e);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [relatedSectorEnabled, data, sectorAuthSegment]);
-
-  useEffect(() => {
-    if (!relatedSectorEnabled) return;
-    if (!isArray(data) || data.length === 0) return;
-
-    const labels = new Set();
-    for (const row of data) {
-      const code = row?.code;
-      const lbl = code && relatedSectorByCode[code];
-      const t = lbl != null ? String(lbl).trim() : '';
-      if (t) labels.add(t);
-    }
-    const labelList = Array.from(labels);
-    if (labelList.length === 0) return;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        // 1. 批量获取 secid
-        const secidResults = await fetchFundSecidsBatch(labelList);
-        if (cancelled) return;
-
-        // 2. 批量获取行情
-        const secids = labelList.map((label) => secidResults[label]).filter(Boolean);
-        const quotes = await fetchEastmoneySectorQuotesBatch(secids);
-        if (cancelled) return;
-        const batch = {};
-        for (const label of labelList) {
-          const secid = secidResults[label];
-          if (!secid) continue;
-          const quote = quotes[secid];
-          if (quote) batch[label] = quote;
-        }
-        setSectorQuoteByLabel((prev) => {
-          let changed = false;
-          const next = { ...prev };
-          for (const [label, quote] of Object.entries(batch)) {
-            const prevQ = next[label];
-            if (prevQ === quote) continue;
-            if (prevQ && quote && prevQ.pct === quote.pct && prevQ.name === quote.name && prevQ.code === quote.code) {
-              continue;
-            }
-            next[label] = quote;
-            changed = true;
-          }
-          return changed ? next : prev;
-        });
-      } catch (e) {
-        console.error('Fetch sector quotes batch error (mobile):', e);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [relatedSectorEnabled, data, relatedSectorByCode]);
-
-  const withRelatedSectorFund = useCallback(
-    (row) => {
-      if (!row || !row.code) return row;
-      const rawValue = relatedSectorByCode?.[row.code] ?? relatedSectorCacheRef.current.get(row.code) ?? '';
-      const relatedSector = rawValue != null ? String(rawValue).trim() : '';
-      const quote = relatedSector ? sectorQuoteByLabel?.[relatedSector] : null;
-      const quoteName = quote?.name != null ? String(quote.name).trim() : '';
-      const quotePct = quote?.pct == null ? null : Number(quote.pct);
-      const hasQuotePct = quotePct != null && Number.isFinite(quotePct);
-
-      return {
-        ...row,
-        rawFund: {
-          ...(row.rawFund || { code: row.code, name: row.fundName }),
-          relatedSector,
-          relatedSectorQuoteName: quoteName,
-          relatedSectorQuotePct: hasQuotePct ? quotePct : null
-        }
-      };
-    },
-    [relatedSectorByCode, sectorQuoteByLabel]
-  );
-
-  const getFundCardPropsWithRelatedSector = useCallback(
-    (row) => {
-      if (!getFundCardProps) return {};
-      return getFundCardProps(withRelatedSectorFund(row));
-    },
-    [getFundCardProps, withRelatedSectorFund]
-  );
 
   const periodReturnsEnabled =
     mobileColumnVisibility?.period1w !== false ||
@@ -1456,10 +1304,6 @@ const MobileFundTable = memo(function MobileFundTable({
       return mapWithEditAndData(NAME_CELL_WIDTH, otherColumnWidth);
     }
 
-    if (isEditMode && nonNameCount >= 3) {
-      const w = FALLBACK_WIDTHS.relatedSector;
-      return { ...FALLBACK_WIDTHS, fundName: NAME_CELL_WIDTH + w };
-    }
     return { ...FALLBACK_WIDTHS };
   }, [tableContainerWidth, mobileColumnOrder, mobileColumnVisibility, isEditMode]);
 
@@ -1966,66 +1810,6 @@ const MobileFundTable = memo(function MobileFundTable({
         meta: { align: 'right', cellClassName: 'tags-cell', width: columnWidthMap.tags ?? 120 }
       },
       {
-        id: 'relatedSector',
-        header: '关联板块',
-        cell: (info) => {
-          const original = info.row.original || {};
-          const code = original.code;
-          const value = (code && (relatedSectorByCode?.[code] ?? relatedSectorCacheRef.current.get(code))) || '';
-          const display = value || '—';
-          const labelKey = value ? String(value).trim() : '';
-          const quote = labelKey ? sectorQuoteByLabel?.[labelKey] : null;
-          const nameFromQuote = quote?.name != null ? String(quote.name).trim() : '';
-          const firstLine = nameFromQuote || display;
-          const pct = quote?.pct;
-          const pctText = pct != null ? `${pct > 0 ? '+' : ''}${pct.toFixed(2)}%` : null;
-          const pctCls = pct != null ? (pct > 0 ? 'up' : pct < 0 ? 'down' : '') : '';
-          return (
-            <div
-              style={{
-                width: '100%',
-                minWidth: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'stretch',
-                gap: 2
-              }}
-            >
-              {pctText != null ? (
-                <div
-                  className={pctCls}
-                  style={{
-                    fontWeight: 700,
-                    textAlign: 'right',
-                    fontSize: 'clamp(9px, 2.5vw, 12px)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  }}
-                >
-                  {pctText}
-                </div>
-              ) : null}
-              <span
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  minWidth: 0,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  textAlign: 'right',
-                  fontSize: pctText != null ? '10px' : '12px'
-                }}
-              >
-                {firstLine}
-              </span>
-            </div>
-          );
-        },
-        meta: { align: 'right', cellClassName: 'related-sector-cell', width: columnWidthMap.relatedSector ?? 120 }
-      },
-      {
         id: 'period1w',
         header: '近1周',
         cell: (info) => {
@@ -2319,7 +2103,7 @@ const MobileFundTable = memo(function MobileFundTable({
       },
       {
         accessorKey: 'yesterdayChangePercent',
-        header: '最新涨幅',
+        header: '最近涨幅',
         cell: (info) => {
           const original = info.row.original || {};
           const value = original.yesterdayChangeValue;
@@ -2351,7 +2135,7 @@ const MobileFundTable = memo(function MobileFundTable({
       },
       {
         accessorKey: 'estimateChangePercent',
-        header: '估算涨幅',
+        header: '实时估值',
         cell: (info) => {
           const original = info.row.original || {};
           const value = original.estimateChangeValue;
@@ -2494,7 +2278,7 @@ const MobileFundTable = memo(function MobileFundTable({
       },
       {
         accessorKey: 'todayProfit',
-        header: '当日收益',
+        header: '今日收益',
         cell: (info) => {
           const original = info.row.original || {};
           const value = original.todayProfitValue;
@@ -2646,8 +2430,6 @@ const MobileFundTable = memo(function MobileFundTable({
       getFundCardProps,
       handleOpenCardSheet,
       sortBy,
-      relatedSectorByCode,
-      sectorQuoteByLabel,
       periodReturnsByCode,
       dataSourceAccuracyLabels,
       isEditMode,
@@ -3049,12 +2831,6 @@ const MobileFundTable = memo(function MobileFundTable({
                         isSelected={editSelectedCodes?.has?.(row.original.code)}
                         masked={masked}
                         periodReturns={periodReturnsByCode[row.original.code]}
-                        relatedSector={relatedSectorByCode[row.original.code]}
-                        sectorQuote={
-                          relatedSectorByCode[row.original.code]
-                            ? sectorQuoteByLabel[String(relatedSectorByCode[row.original.code]).trim()]
-                            : null
-                        }
                         fundExtraData={fundExtraDataByCode[row.original.code]}
                         tableColumnOrder={tableColumnOrder}
                         tableColumnVisibility={tableColumnVisibility}
@@ -3230,7 +3006,7 @@ const MobileFundTable = memo(function MobileFundTable({
           (fundDetailStyle === 'manager' ? (
             <FundManagerDetail
               row={cardSheetRow}
-              getFundCardProps={getFundCardPropsWithRelatedSector}
+              getFundCardProps={getFundCardProps}
               blockClose={blockDrawerClose || moveGroupOpen}
               onClose={() => setCardSheetRow(null)}
             />
@@ -3243,7 +3019,7 @@ const MobileFundTable = memo(function MobileFundTable({
               blockDrawerClose={blockDrawerClose || moveGroupOpen}
               ignoreNextDrawerCloseRef={ignoreNextDrawerCloseRef}
               cardSheetRow={cardSheetRow}
-              getFundCardProps={getFundCardPropsWithRelatedSector}
+              getFundCardProps={getFundCardProps}
             />
           ))}
 
