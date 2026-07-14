@@ -59,9 +59,9 @@ const IOS_VISUAL_GUIDE = [
 
 const WECHAT_IOS_VISUAL_GUIDE = [
   {
-    image: '/pwa-guide/wechat-open-safari.webp',
-    title: '从微信打开 Safari',
-    description: '点击微信右上角的“…”按钮，再选择“在 Safari 中打开”。'
+    image: '/pwa-guide/wechat-system-browser.webp',
+    title: '使用系统浏览器打开',
+    description: '点击微信右上角的“…”按钮，再选择“系统浏览器”。'
   }
 ];
 
@@ -142,7 +142,7 @@ export default function PwaInstallGuide() {
     const mainUrl = `${window.location.origin}/`;
     try {
       await window.navigator.clipboard.writeText(mainUrl);
-      toast.success('网址已复制', { description: '请粘贴到 Safari 或系统浏览器打开' });
+      toast.success('网址已复制', { description: '请粘贴到系统浏览器打开' });
     } catch {
       toast.error('复制失败', { description: mainUrl });
     }
@@ -287,6 +287,26 @@ export default function PwaInstallGuide() {
     return () => window.clearTimeout(timeoutId);
   }, [showGuide]);
 
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement) activeElement.blur();
+
+    const resetScroll = () => {
+      const drawer = document.querySelector('.pwa-install-drawer');
+      if (drawer) drawer.scrollTop = 0;
+    };
+
+    resetScroll();
+    const frameId = window.requestAnimationFrame(resetScroll);
+    const timeoutId = window.setTimeout(resetScroll, 240);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [open, visualGuideOpen]);
+
   const guideContent = {
     'android-native': {
       badge: 'Android',
@@ -310,11 +330,11 @@ export default function PwaInstallGuide() {
     'ios-wechat': {
       badge: 'iOS · 微信',
       title: '建议添加桌面快捷方式',
-      description: '先从微信使用 Safari 打开，再将估基添加到主屏幕。',
+      description: '先从微信使用系统浏览器打开，再将估基添加到主屏幕。',
       steps: [
         [MoreHorizontal, '点击微信页面右上角的“…”按钮'],
-        [Compass, '在菜单中选择“在 Safari 中打开”'],
-        [SquarePlus, '进入 Safari 后，继续添加到主屏幕']
+        [Compass, '在菜单中选择“系统浏览器”'],
+        [SquarePlus, '进入系统浏览器后，继续添加到主屏幕']
       ]
     },
     'ios-browser': {
@@ -352,9 +372,9 @@ export default function PwaInstallGuide() {
   const needsBrowserTransfer = variant === 'ios-browser' || variant === 'ios-wechat' || variant === 'in-app';
   const currentVisualStep = visualGuideItems[visualGuideStep];
   const hasVisualGuide = variant === 'ios-safari' || variant === 'ios-wechat';
-  const visualEntryTitle = variant === 'ios-wechat' ? '查看微信打开 Safari 图示' : '查看图片指引';
+  const visualEntryTitle = variant === 'ios-wechat' ? '查看微信系统浏览器图示' : '查看图片指引';
   const visualEntryDescription =
-    variant === 'ios-wechat' ? '红框标出微信右上角和 Safari 入口' : '红框标出每一步要点的位置';
+    variant === 'ios-wechat' ? '红框标出微信右上角和“系统浏览器”入口' : '红框标出每一步要点的位置';
   const defaultHeight = visualGuideOpen
     ? '86vh'
     : variant === 'android-native'
