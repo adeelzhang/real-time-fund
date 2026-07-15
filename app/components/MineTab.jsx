@@ -80,26 +80,6 @@ export default function MineTab({
 
   return (
     <div className="mine-tab" style={{ display: visible ? undefined : 'none' }} aria-hidden={!visible || undefined}>
-      <section className="mine-install-section" aria-label="添加到主屏幕">
-        <button
-          type="button"
-          className={`mine-install-card${isStandalone ? ' is-installed' : ''}`}
-          onClick={openPwaInstallGuide}
-          disabled={isStandalone}
-        >
-          <span className="mine-install-icon-wrap">
-            {isStandalone ? <CheckCircle2 aria-hidden /> : <SquarePlus aria-hidden />}
-          </span>
-          <span className="mine-install-copy">
-            <span className="mine-install-title">{isStandalone ? '已添加到主屏幕' : '添加估基到主屏幕'}</span>
-            <span className="mine-install-description">
-              {isStandalone ? '当前正以桌面快捷方式打开' : '像 App 一样从手机桌面快速打开'}
-            </span>
-          </span>
-          {!isStandalone ? <ChevronRight className="mine-install-chevron" aria-hidden /> : null}
-        </button>
-      </section>
-
       <section className="mine-section" aria-labelledby="mine-account-title">
         <h2 id="mine-account-title" className="mine-section-title">
           账户
@@ -148,6 +128,26 @@ export default function MineTab({
             ) : null}
           </div>
         </div>
+      </section>
+
+      <section className="mine-install-section" aria-label="添加到主屏幕">
+        <button
+          type="button"
+          className={`mine-install-card${isStandalone ? ' is-installed' : ''}`}
+          onClick={openPwaInstallGuide}
+          disabled={isStandalone}
+        >
+          <span className="mine-install-icon-wrap">
+            {isStandalone ? <CheckCircle2 aria-hidden /> : <SquarePlus aria-hidden />}
+          </span>
+          <span className="mine-install-copy">
+            <span className="mine-install-title">{isStandalone ? '已添加到主屏幕' : '添加到主屏幕'}</span>
+            <span className="mine-install-description">
+              {isStandalone ? '当前正以桌面快捷方式打开' : '像 App 一样从手机桌面快速打开'}
+            </span>
+          </span>
+          {!isStandalone ? <ChevronRight className="mine-install-chevron" aria-hidden /> : null}
+        </button>
       </section>
 
       <section className="mine-section" aria-labelledby="mine-data-title">
