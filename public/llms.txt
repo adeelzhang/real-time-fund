@@ -9,6 +9,7 @@
 
 ## Public pages
 
+- [面向 AI 的站点说明](https://www.myfunds.cc/index.md): 估基的精简 Markdown 介绍、主要能力、数据边界与公开资料入口。
 - [估基首页](https://www.myfunds.cc/): 基金估值、持仓管理与全球行情 Web 应用。
 - [使用帮助](https://www.myfunds.cc/help): 登录、同步、搜索、持仓、备份和添加到主屏幕的常见问题。
 - [计算说明](https://www.myfunds.cc/methodology): 基金估值、持仓金额、今日收益和累计收益的计算口径。
