@@ -5372,10 +5372,8 @@ export default function HomePage() {
           user={user}
           userAvatar={userAvatar}
           lastSyncDisplay={lastSyncTime ? dayjs(lastSyncTime).format('MM-DD HH:mm') : null}
-          isSyncing={isSyncing}
           onLogin={handleOpenLogin}
           onLogout={handleLogout}
-          onSync={() => user?.id && syncUserConfig(user.id)}
           onMyEarnings={() => setPortfolioEarningsOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
         />
