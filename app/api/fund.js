@@ -4,6 +4,7 @@ import timezone from 'dayjs/plugin/timezone';
 import { isArray, isNumber, isObject, isString } from 'lodash';
 import { storageStore } from '../stores';
 import { withRetry } from '../lib/asyncHelper';
+import { normalizeFundNavRows, parseFundDividend } from '../lib/fundNav';
 import { getQueryClient } from '../lib/get-query-client';
 import * as qk from '../lib/query-keys';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
@@ -521,64 +522,69 @@ export const loadScript = (url, options = {}) => {
     });
 };
 
+export const fetchRecentFundNetValues = async (code, pageSize = 3) => {
+  if (typeof window === 'undefined') return [];
+  const c = code != null ? String(code).trim() : '';
+  if (!c) return [];
+  const size = Math.max(3, Math.min(100, Number(pageSize) || 3));
+  const qc = getQueryClient();
+
+  try {
+    return await qc.fetchQuery({
+      queryKey: qk.fundRecentNav(c, size),
+      queryFn: async () => {
+        const params = new URLSearchParams({
+          FCODE: c,
+          pageIndex: '1',
+          pageSize: String(size),
+          plat: 'Android',
+          appType: 'ttjj',
+          product: 'EFund',
+          Version: '1',
+          deviceid: `rtf${nowInTz().format('YYYYMMDD')}`
+        });
+        const response = await fetch(
+          `https://fundmobapi.eastmoney.com/FundMNewApi/FundMNHisNetList?${params.toString()}`
+        );
+        if (!response.ok) throw new Error(`recent nav http ${response.status}`);
+        const payload = await response.json();
+        if (!payload?.Success || !isArray(payload?.Datas)) throw new Error(payload?.ErrMsg || 'recent nav no data');
+        const rows = normalizeFundNavRows(payload.Datas);
+        if (!rows.length) throw new Error('recent nav empty');
+        return rows;
+      },
+      staleTime: getNetValueStaleTime()
+    });
+  } catch {
+    const endDate = nowInTz().format('YYYY-MM-DD');
+    const startDate = nowInTz()
+      .subtract(Math.max(30, size * 2), 'day')
+      .format('YYYY-MM-DD');
+    const rows = await fetchNetValueRangeFromTrend(c, startDate, endDate, {
+      cacheTime: getNetValueStaleTime()
+    });
+    return rows.slice(-size);
+  }
+};
+
 export const fetchFundNetValue = async (code, date) => {
   if (typeof window === 'undefined') return null;
-  const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${code}&page=1&per=1&sdate=${date}&edate=${date}`;
   try {
-    const apidata = await loadScript(url, { staleTime: getNetValueStaleTime() });
-    if (apidata && apidata.content) {
-      const content = apidata.content;
-      if (content.includes('暂无数据')) return null;
-      const rows = content.split('<tr>');
-      for (const row of rows) {
-        if (row.includes(`<td>${date}</td>`)) {
-          const cells = row.match(/<td[^>]*>(.*?)<\/td>/g);
-          if (cells && cells.length >= 2) {
-            const valStr = cells[1].replace(/<[^>]+>/g, '');
-            const val = parseFloat(valStr);
-            return isNaN(val) ? null : val;
-          }
-        }
-      }
-    }
-    return null;
-  } catch (e) {
+    const recentRows = await fetchRecentFundNetValues(code, 30);
+    const recent = recentRows.find((row) => row.date === date);
+    if (recent) return recent.nav;
+
+    const rows = await fetchNetValueRangeFromTrend(code, date, date, {
+      cacheTime: getNetValueStaleTime()
+    });
+    return rows[0]?.nav ?? null;
+  } catch {
     return null;
   }
 };
 
-const parseLatestNetValueFromLsjzContent = (content) => {
-  if (!content || content.includes('暂无数据')) return null;
-  const rowMatches = content.match(/<tr[\s\S]*?<\/tr>/gi) || [];
-  for (const row of rowMatches) {
-    const cells = row.match(/<td[^>]*>(.*?)<\/td>/gi) || [];
-    if (!cells.length) continue;
-    const getText = (td) => td.replace(/<[^>]+>/g, '').trim();
-    const dateStr = getText(cells[0] || '');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
-    const navStr = getText(cells[1] || '');
-    const nav = parseFloat(navStr);
-    if (!Number.isFinite(nav)) continue;
-    let growth = null;
-    for (const c of cells) {
-      const txt = getText(c);
-      const m = txt.match(/([-+]?\d+(?:\.\d+)?)\s*%/);
-      if (m) {
-        growth = parseFloat(m[1]);
-        break;
-      }
-    }
-    return { date: dateStr, nav, growth };
-  }
-  return null;
-};
-
 /**
- * 解析历史净值数据（支持多条记录）
- * 返回按日期升序排列的净值数组
- */
-/**
- * 根据 lsjz 升序净值列表推算「上一完整交易日」相对再前一日的涨跌幅与每份净值差（用于昨日收益）
+ * 根据升序净值列表推算「上一完整交易日」相对再前一日的涨跌幅与每份净值差（用于昨日收益）
  */
 const computeYesterdayNavMetricsFromList = (navList) => {
   const out = { yesterdayZzl: null, yesterdayNavDelta: null };
@@ -606,44 +612,8 @@ const computeYesterdayNavMetricsFromList = (navList) => {
   return out;
 };
 
-const parseNetValuesFromLsjzContent = (content) => {
-  if (!content || content.includes('暂无数据')) return [];
-  const rowMatches = content.match(/<tr[\s\S]*?<\/tr>/gi) || [];
-  const results = [];
-  for (const row of rowMatches) {
-    const cells = row.match(/<td[^>]*>(.*?)<\/td>/gi) || [];
-    if (!cells.length) continue;
-    const getText = (td) => td.replace(/<[^>]+>/g, '').trim();
-    const dateStr = getText(cells[0] || '');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
-    const navStr = getText(cells[1] || '');
-    const nav = parseFloat(navStr);
-    if (!Number.isFinite(nav)) continue;
-    let growth = null;
-    for (const c of cells) {
-      const txt = getText(c);
-      const m = txt.match(/([-+]?\d+(?:\.\d+)?)\s*%/);
-      if (m) {
-        growth = parseFloat(m[1]);
-        break;
-      }
-    }
-
-    let dividend = null;
-    const divText = getText(cells[6] || '');
-    const divMatch = divText.match(/派现金(\d+(?:\.\d+)?)/);
-    if (divMatch) {
-      dividend = parseFloat(divMatch[1]);
-    }
-
-    results.push({ date: dateStr, nav, growth, dividend });
-  }
-  // 返回按日期升序排列的结果（API返回的是倒序，需要反转）
-  return results.reverse();
-};
-
 /**
- * 按日期区间批量拉取历史净值（lsjz），支持分页，减少逐日请求次数。
+ * 从净值走势数据中提取指定日期区间的历史净值。
  * @param {string} code 基金代码
  * @param {string} sdate 开始 YYYY-MM-DD
  * @param {string} edate 结束 YYYY-MM-DD
@@ -662,27 +632,7 @@ export const fetchFundNetValueRange = async (code, sdate, edate) => {
   }
   if (sdate > edate) return [];
 
-  const c = String(code).trim();
-  const merged = new Map();
-  let pageNum = 1;
-  const per = 500;
-  while (true) {
-    const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${c}&page=${pageNum}&per=${per}&sdate=${sdate}&edate=${edate}`;
-    try {
-      const apidata = await loadScript(url);
-      const content = apidata?.content || '';
-      const batch = parseNetValuesFromLsjzContent(content);
-      if (!batch.length) break;
-      for (const row of batch) {
-        merged.set(row.date, row);
-      }
-      if (batch.length < per) break;
-      pageNum += 1;
-    } catch {
-      break;
-    }
-  }
-  return Array.from(merged.values()).sort((a, b) => a.date.localeCompare(b.date));
+  return fetchNetValueRangeFromTrend(String(code).trim(), sdate, edate);
 };
 
 /**
@@ -742,7 +692,12 @@ export const fetchNetValueRangeFromTrend = async (code, sdate, edate, options = 
       const date = dayjs(d.x).tz(TZ).format('YYYY-MM-DD');
       const nav = Number(d.y);
       if (!Number.isFinite(nav) || nav <= 0) continue;
-      byDate.set(date, nav); // 同日覆盖取最后一条
+      const rawGrowth = Number(d.equityReturn);
+      byDate.set(date, {
+        nav,
+        growth: Number.isFinite(rawGrowth) ? rawGrowth : null,
+        dividend: parseFundDividend(d.unitMoney)
+      }); // 同日覆盖取最后一条
     }
 
     // 提取范围内数据并计算 growth（日涨跌幅）
@@ -751,16 +706,17 @@ export const fetchNetValueRangeFromTrend = async (code, sdate, edate, options = 
     for (let i = 0; i < allDates.length; i++) {
       const date = allDates[i];
       if (date < sdate || date > edate) continue;
-      const nav = byDate.get(date);
-      let growth = null;
+      const item = byDate.get(date);
+      const nav = item.nav;
+      let growth = item.growth;
       // 寻找前一个交易日净值用于计算涨跌幅
-      if (i > 0) {
-        const prevNav = byDate.get(allDates[i - 1]);
+      if (growth == null && i > 0) {
+        const prevNav = byDate.get(allDates[i - 1])?.nav;
         if (Number.isFinite(prevNav) && prevNav > 0) {
           growth = ((nav - prevNav) / prevNav) * 100;
         }
       }
-      results.push({ date, nav, growth });
+      results.push({ date, nav, growth, dividend: item.dividend });
     }
 
     return results;
@@ -829,12 +785,9 @@ export const fetchFundDataFallback = async (c) => {
   }
   return new Promise(async (resolve, reject) => {
     try {
-      // 尝试并行获取 F10 数据和通过搜索接口获取基金名称
-      const f10Promise = (async () => {
-        const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${c}&page=1&per=3&sdate=&edate=`;
-        const apidata = await loadScript(url);
-        const content = apidata?.content || '';
-        const navList = parseNetValuesFromLsjzContent(content);
+      // 尝试并行获取最近净值和基金名称
+      const navPromise = (async () => {
+        const navList = await fetchRecentFundNetValues(c, 3);
         const latest = navList.length > 0 ? navList[navList.length - 1] : null;
         const previousNav = navList.length > 1 ? navList[navList.length - 2] : null;
         const yM = computeYesterdayNavMetricsFromList(navList);
@@ -852,7 +805,7 @@ export const fetchFundDataFallback = async (c) => {
         }
       })();
 
-      const [navResult, fundName] = await Promise.all([f10Promise, namePromise]);
+      const [navResult, fundName] = await Promise.all([navPromise, namePromise]);
 
       if (navResult && navResult.latest && navResult.latest.nav) {
         const { latest, previousNav, yM } = navResult;
@@ -1369,6 +1322,9 @@ export async function fetchFundValuationBySource(code, dataSource = 1) {
         const gszNum = Number(json.gsz);
         safeResolve({
           code: json.fundcode != null ? String(json.fundcode).trim() : c,
+          name: json.name || null,
+          dwjz: json.dwjz != null ? String(json.dwjz) : null,
+          jzrq: json.jzrq != null ? String(json.jzrq) : null,
           gsz: Number.isFinite(gszNum) ? gszNum : json.gsz,
           gztime: json.gztime != null ? String(json.gztime).replace(/:(\d{2}):\d{2}$/, ':$1') : null,
           gszzl: Number.isFinite(gszzlNum) ? gszzlNum : json.gszzl,
@@ -1452,13 +1408,10 @@ export const fetchFundData = async (c, overrideDataSource) => {
     } catch (e) {}
   }
 
-  // 1. 发起并发的历史净值和重仓请求
-  const lsjzPromise = new Promise((resolveT) => {
-    const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${code}&page=1&per=3&sdate=&edate=`;
-    loadScript(url, { staleTime: getNetValueStaleTime() })
-      .then((apidata) => {
-        const content = apidata?.content || '';
-        const navList = parseNetValuesFromLsjzContent(content);
+  // 1. 发起最近确认净值请求
+  const recentNavPromise = new Promise((resolveT) => {
+    fetchRecentFundNetValues(code, 3)
+      .then((navList) => {
         if (navList.length > 0) {
           const latest = navList[navList.length - 1];
           const previousNav = navList.length > 1 ? navList[navList.length - 2] : null;
@@ -1495,7 +1448,7 @@ export const fetchFundData = async (c, overrideDataSource) => {
       }
     }
 
-    const [tData] = await Promise.all([lsjzPromise]);
+    const [tData] = await Promise.all([recentNavPromise]);
 
     if (tData) {
       if (tData.jzrq && (!baseData.jzrq || tData.jzrq >= baseData.jzrq)) {

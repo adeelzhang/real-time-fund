@@ -279,6 +279,18 @@ export function useRefreshManager({ scheduleDcaTrades, processPendingQueue, devi
             data.noValuation = false;
           }
 
+          if (oldData) {
+            const confirmedFields = ['name', 'dwjz', 'jzrq', 'zzl', 'lastNav', 'yesterdayZzl', 'yesterdayNavDelta'];
+            const receivedOlderNav =
+              isValidDateStr(oldData.jzrq) && (!isValidDateStr(data.jzrq) || data.jzrq < oldData.jzrq);
+            confirmedFields.forEach((field) => {
+              const missing = data[field] == null || data[field] === '';
+              if ((missing || receivedOlderNav) && oldData[field] != null && oldData[field] !== '') {
+                data[field] = oldData[field];
+              }
+            });
+          }
+
           const currentNavDate = isValidDateStr(data.jzrq) ? data.jzrq : null;
           const previousNavDate = isValidDateStr(oldData?.jzrq) ? oldData.jzrq : null;
           if (currentNavDate && previousNavDate && currentNavDate > previousNavDate) {
