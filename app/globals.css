@@ -1391,22 +1391,7 @@ input[type='number'] {
 
 @media (max-width: 640px) {
   .footer {
-    margin-top: 20px;
-    padding: 0 12px calc(92px + env(safe-area-inset-bottom));
-  }
-
-  .footer-description {
-    margin-bottom: 10px;
-    line-height: 1.65;
-  }
-
-  .site-info-links {
-    gap: 0 14px;
-  }
-
-  .site-info-links a {
-    min-height: 36px;
-    font-weight: 500;
+    display: none;
   }
 }
 
