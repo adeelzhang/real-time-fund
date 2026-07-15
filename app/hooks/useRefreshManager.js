@@ -105,6 +105,37 @@ export function useRefreshManager({ scheduleDcaTrades, processPendingQueue, devi
         }
       };
 
+      const applyFundUpdates = (rows) => {
+        if (!isArray(rows) || rows.length === 0) return;
+        const updatedMap = new Map(rows.filter(Boolean).map((row) => [row.code, row]));
+        if (updatedMap.size === 0) return;
+
+        useStorageStore.getState().setFunds((prev) => {
+          let changed = false;
+          const next = prev.map((f) => {
+            const u = updatedMap.get(f.code);
+            if (!u) return f;
+            changed = true;
+            const merged = { ...u };
+            if (f.addedAt != null) merged.addedAt = f.addedAt;
+            if (f.addBaseNav != null) merged.addBaseNav = f.addBaseNav;
+            if (f.addBaseDate != null) merged.addBaseDate = f.addBaseDate;
+            if (f.dataSource != null) merged.dataSource = f.dataSource;
+            if (f.autoSource != null) merged.autoSource = f.autoSource;
+            if (f.showImageChart !== undefined) merged.showImageChart = f.showImageChart;
+            if (f.confirmDays != null) merged.confirmDays = f.confirmDays;
+            if (merged.addedAt == null || merged.addBaseNav == null || merged.addBaseDate == null) {
+              const snap = getAddBaseSnapshotFromFund(merged);
+              if (merged.addedAt == null) merged.addedAt = Date.now();
+              if (merged.addBaseNav == null && snap.nav != null) merged.addBaseNav = snap.nav;
+              if (merged.addBaseDate == null && snap.date) merged.addBaseDate = snap.date;
+            }
+            return merged;
+          });
+          return changed ? next : prev;
+        });
+      };
+
       try {
         const updated = [];
         const dailyChanges = {};
@@ -252,7 +283,7 @@ export function useRefreshManager({ scheduleDcaTrades, processPendingQueue, devi
           console.error('批量获取自动数据源失败', e);
         }
 
-        await asyncPool(3, uniqueCodes, async (c) => {
+        await asyncPool(4, uniqueCodes, async (c) => {
           if (!fundCodeStillInStorage(c)) return;
           let data = null;
           try {
@@ -303,12 +334,25 @@ export function useRefreshManager({ scheduleDcaTrades, processPendingQueue, devi
 
           updated.push(data);
 
+          // 行情先展示；确认天数和历史收益补齐不应阻塞整张基金列表刷新。
+          applyFundUpdates([data]);
+
           // 按需获取基金确认天数（仅在 localStorage 中无缓存时请求）
           try {
             const storedForConfirm = getStoredFundSnapshot(data.code);
             if (storedForConfirm?.confirmDays == null) {
-              const days = await fetchFundConfirmDays(data.code);
-              if (days != null) data.confirmDays = days;
+              void fetchFundConfirmDays(data.code)
+                .then((days) => {
+                  if (days == null) return;
+                  useStorageStore
+                    .getState()
+                    .setFunds((prev) =>
+                      prev.map((fund) =>
+                        fund.code === data.code && fund.confirmDays == null ? { ...fund, confirmDays: days } : fund
+                      )
+                    );
+                })
+                .catch(() => {});
             }
           } catch (e) {
             // 获取确认天数失败不影响主流程
@@ -508,31 +552,7 @@ export function useRefreshManager({ scheduleDcaTrades, processPendingQueue, devi
 
         // UI 与存储同步
         if (updated.length > 0) {
-          useStorageStore.getState().setFunds((prev) => {
-            const updatedMap = new Map(updated.map((x) => [x.code, x]));
-            let changed = false;
-            const next = prev.map((f) => {
-              const u = updatedMap.get(f.code);
-              if (!u) return f;
-              changed = true;
-              const merged = { ...u };
-              if (f.addedAt != null) merged.addedAt = f.addedAt;
-              if (f.addBaseNav != null) merged.addBaseNav = f.addBaseNav;
-              if (f.addBaseDate != null) merged.addBaseDate = f.addBaseDate;
-              if (f.dataSource != null) merged.dataSource = f.dataSource;
-              if (f.autoSource != null) merged.autoSource = f.autoSource;
-              if (f.showImageChart !== undefined) merged.showImageChart = f.showImageChart;
-              if (f.confirmDays != null) merged.confirmDays = f.confirmDays;
-              if (merged.addedAt == null || merged.addBaseNav == null || merged.addBaseDate == null) {
-                const snap = getAddBaseSnapshotFromFund(merged);
-                if (merged.addedAt == null) merged.addedAt = Date.now();
-                if (merged.addBaseNav == null && snap.nav != null) merged.addBaseNav = snap.nav;
-                if (merged.addBaseDate == null && snap.date) merged.addBaseDate = snap.date;
-              }
-              return merged;
-            });
-            return changed ? next : prev;
-          });
+          applyFundUpdates(updated);
           if (valuationChanged) {
             useStorageStore.getState().setValuationSeries((prev) => {
               const next = { ...prev };
