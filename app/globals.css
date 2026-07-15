@@ -323,7 +323,7 @@ body::before {
 
 .container {
   max-width: 100%;
-  width: 1200px;
+  width: var(--container-width, 1200px);
   margin: 0 auto;
   padding: 24px;
   /* 隐藏 y 轴滚动条，保留滚动能力 */

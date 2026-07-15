@@ -20,7 +20,7 @@ export default function NavLayout({
   return (
     <>
       <PcSideNav value={mainTab} onChange={setMainTab} />
-      <main ref={containerRef} className={containerClassName} style={{ width: isMobile ? '100%' : containerWidth }}>
+      <main ref={containerRef} className={containerClassName} style={{ '--container-width': `${containerWidth}px` }}>
         <AnimatePresence>
           {showThemeTransition && (
             <motion.div
