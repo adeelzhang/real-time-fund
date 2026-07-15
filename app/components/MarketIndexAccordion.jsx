@@ -341,11 +341,12 @@ export default function MarketIndexAccordion({ navbarHeight = 0, onCustomSetting
   const isUp = current ? current.change >= 0 : false;
   const colorClass = isUp ? 'text-[var(--danger)]' : 'text-[var(--success)]';
 
-  const topMargin = Number(navbarHeight) || 0;
+  const measuredNavbarHeight = Number(navbarHeight) || 0;
+  const navbarOffset = measuredNavbarHeight > 0 ? `${measuredNavbarHeight}px` : 'var(--navbar-initial-height)';
   const stickyStyle = {
-    marginTop: topMargin,
+    marginTop: navbarOffset,
     position: 'sticky',
-    top: topMargin,
+    top: navbarOffset,
     zIndex: 10,
     width: isMobile ? 'calc(100% + 24px)' : '100%',
     marginLeft: isMobile ? -12 : 0

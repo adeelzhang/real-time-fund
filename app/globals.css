@@ -108,6 +108,19 @@ html {
   --my-earnings-illu-stroke-strong: #77d8ff;
   --my-earnings-illu-highlight: #8be0ff;
   --my-earnings-illu-baseline: #4bc1ff;
+  --navbar-initial-height: 72px;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --navbar-initial-height: 71px;
+  }
+}
+
+@media (max-width: 397px) {
+  :root {
+    --navbar-initial-height: 103px;
+  }
 }
 
 /* 亮色主题：ui-ux-pro-max 规范 - 正文 #0F172A、弱化 #475569、玻璃 bg-white/80+、边框可见 */

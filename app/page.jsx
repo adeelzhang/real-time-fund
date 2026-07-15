@@ -4209,6 +4209,7 @@ export default function HomePage() {
   ]
     .filter(Boolean)
     .join(' ');
+  const navbarOffsetCss = navbarHeight > 0 ? `${navbarHeight}px` : 'var(--navbar-initial-height)';
 
   /** 移动端底部 Tab 切换时保留首页 DOM，用显隐代替卸载 */
   const mobileHomeTabVisible = mainTab === 'home' || mainTab === 'market' || mainTab === 'global';
@@ -4746,12 +4747,12 @@ export default function HomePage() {
           <div style={{ display: mainTab === 'home' ? 'contents' : 'none' }}>
             <div className="grid">
               <div className="col-12">
-                {!shouldShowMarketIndex && <div aria-hidden="true" style={{ height: navbarHeight }} />}
+                {!shouldShowMarketIndex && <div aria-hidden="true" style={{ height: navbarOffsetCss }} />}
                 <div
                   ref={filterBarRef}
                   className="filter-bar"
                   style={{
-                    top: `calc(${navbarHeight}px + var(--market-index-height, 0px))`,
+                    top: `calc(${navbarOffsetCss} + var(--market-index-height, 0px))`,
                     marginTop: 0,
                     marginBottom: 8,
                     display: 'flex',
