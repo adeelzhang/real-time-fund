@@ -2,7 +2,7 @@
 import { isArray, isObject } from 'lodash';
 import { useIsMobile } from '@/app/hooks/useIsMobile';
 
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { fetchMarketIndices } from '@/app/api/fund';
 import { ChevronRightIcon } from 'lucide-react';
@@ -145,7 +145,7 @@ function MiniTrendLine({ changePercent, code, className }) {
   );
 }
 
-function IndexCard({ item }) {
+function IndexCard({ item, showTrend }) {
   const isUp = item.change >= 0;
   const colorClass = isUp ? 'text-[var(--danger)]' : 'text-[var(--success)]';
   return (
@@ -156,9 +156,11 @@ function IndexCard({ item }) {
         {(item.change >= 0 ? '+' : '') + item.change.toFixed(2)}{' '}
         {(item.changePercent >= 0 ? '+' : '') + item.changePercent.toFixed(2)}%
       </div>
-      <div className="mt-0.5 flex items-center justify-center opacity-80">
-        <MiniTrendLine changePercent={item.changePercent} code={item.code} />
-      </div>
+      {showTrend ? (
+        <div className="mt-0.5 flex items-center justify-center opacity-80">
+          <MiniTrendLine changePercent={item.changePercent} code={item.code} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -178,6 +180,7 @@ export default function MarketIndexAccordion({ navbarHeight = 0, onCustomSetting
   const rootRef = useRef(null);
   const hasInitializedSelectedCodes = useRef(false);
   const selectionChangeSourceRef = useRef('initial');
+  const lastIndicesLoadAtRef = useRef(0);
 
   useEffect(() => {
     const el = rootRef.current;
@@ -203,7 +206,12 @@ export default function MarketIndexAccordion({ navbarHeight = 0, onCustomSetting
     };
   }, [loading, indices.length]);
 
-  const loadIndices = () => {
+  const loadIndices = useCallback(({ force = false } = {}) => {
+    const now = Date.now();
+    if (!force && lastIndicesLoadAtRef.current && now - lastIndicesLoadAtRef.current < 15000) {
+      return () => {};
+    }
+    lastIndicesLoadAtRef.current = now;
     let cancelled = false;
     setLoading(true);
     fetchMarketIndices()
@@ -219,20 +227,20 @@ export default function MarketIndexAccordion({ navbarHeight = 0, onCustomSetting
     return () => {
       cancelled = true;
     };
-  };
+  }, []);
 
   useEffect(() => {
     // 初次挂载时加载一次指数
-    const cleanup = loadIndices();
+    const cleanup = loadIndices({ force: true });
     return cleanup;
-  }, []);
+  }, [loadIndices]);
 
   useEffect(() => {
     // 跟随基金刷新节奏：每次开始刷新时重新拉取指数
     if (!refreshing) return;
     const cleanup = loadIndices();
     return cleanup;
-  }, [refreshing]);
+  }, [refreshing, loadIndices]);
 
   // 初始化选中指数（本地偏好 > 默认集合）
   useEffect(() => {
@@ -474,7 +482,7 @@ export default function MarketIndexAccordion({ navbarHeight = 0, onCustomSetting
                     flex: isMobile ? '0 0 calc((100% - 24px) / 3)' : '0 0 calc((100% - 48px) / 5)'
                   }}
                 >
-                  <IndexCard item={item} />
+                  <IndexCard item={item} showTrend={openValue === 'indices'} />
                 </div>
               ))}
             </div>

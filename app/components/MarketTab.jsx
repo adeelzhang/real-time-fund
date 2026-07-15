@@ -15,7 +15,7 @@ import {
   CheckCircle,
   PlusCircle
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useReactTable, getCoreRowModel, flexRender } from '@tanstack/react-table';
 import { fetchFundValuationRanking, fetchFundPeriodReturns, fetchHotSectors } from '../api/fund';
 import { cn } from '@/lib/utils';
@@ -111,7 +111,7 @@ export default function MarketTab({ onAddFund, getFundCardProps, isActive, fundD
   } = useQuery({
     queryKey: ['hotSectors'],
     queryFn: () => fetchHotSectors({ pageSize: 80 }),
-    enabled: !!isActive,
+    enabled: Boolean(isActive && user),
     staleTime: 60000,
     retry: 1,
     refetchOnWindowFocus: false
@@ -160,8 +160,9 @@ export default function MarketTab({ onAddFund, getFundCardProps, isActive, fundD
       const res = await fetchFundValuationRanking(sort, order, pageIndex, 20);
       return res?.Data?.list || [];
     },
-    enabled: !!isActive,
+    enabled: Boolean(isActive && user),
     staleTime: 120000,
+    placeholderData: keepPreviousData,
     retry: 1,
     refetchOnWindowFocus: false
   });

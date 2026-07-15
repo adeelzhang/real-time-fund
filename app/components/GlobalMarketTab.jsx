@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Globe2, LockKeyhole, RefreshCw } from 'lucide-react';
 import { fetchGlobalQuotes } from '../api/fund';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -102,6 +102,7 @@ export default function GlobalMarketTab({ isActive, user, onLogin }) {
     queryFn: fetchGlobalQuotes,
     enabled: Boolean(isActive && user),
     staleTime: 15 * 1000,
+    placeholderData: keepPreviousData,
     refetchInterval: isActive && user ? 30 * 1000 : false,
     refetchOnWindowFocus: false,
     retry: 1

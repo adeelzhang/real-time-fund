@@ -28,7 +28,17 @@ import FundCard from './components/FundCard';
 
 import GroupSummary from './components/GroupSummary';
 import GroupAccountSummaryCard from './components/GroupAccountSummaryCard';
-import { CloseIcon, GridIcon, ListIcon, MoonIcon, PlusIcon, SettingsIcon, SortIcon, SunIcon } from './components/Icons';
+import {
+  CloseIcon,
+  GridIcon,
+  ListIcon,
+  MoonIcon,
+  PlusIcon,
+  RefreshIcon,
+  SettingsIcon,
+  SortIcon,
+  SunIcon
+} from './components/Icons';
 import ShareButton from './components/ShareButton';
 import RefreshButton from './components/RefreshButton';
 import MarketIndexAccordion from './components/MarketIndexAccordion';
@@ -478,8 +488,36 @@ export default function HomePage() {
     }
   }, [mainTab, hasVisitedMineTab]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const preloadTabs = () => {
+      if (cancelled) return;
+      void import('./components/MarketTab');
+      void import('./components/GlobalMarketTab');
+      void import('./components/MineTab');
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(preloadTabs, { timeout: 3000 });
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback(idleId);
+      };
+    }
+
+    const timer = window.setTimeout(preloadTabs, 1500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
   const [mobileBottomNavHidden, setMobileBottomNavHidden] = useState(false);
   const lastScrollYRef = useRef(0);
+  const [pullRefreshDistance, setPullRefreshDistance] = useState(0);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
+  const pullRefreshDistanceRef = useRef(0);
+  const pullRefreshingRef = useRef(false);
 
   useEffect(() => {
     if (!isMobile) {
@@ -2649,6 +2687,83 @@ export default function HomePage() {
     refreshAllRef.current = refreshAll;
   }, [refreshAll]);
 
+  useEffect(() => {
+    if (!isMobile || mainTab !== 'home') {
+      pullRefreshDistanceRef.current = 0;
+      pullRefreshingRef.current = false;
+      setPullRefreshDistance(0);
+      setPullRefreshing(false);
+      return;
+    }
+
+    const state = { startX: 0, startY: 0, tracking: false, moved: false };
+    const threshold = 64;
+    const maxDistance = 84;
+
+    const reset = () => {
+      state.tracking = false;
+      state.moved = false;
+      pullRefreshDistanceRef.current = 0;
+      setPullRefreshDistance(0);
+    };
+
+    const onTouchStart = (event) => {
+      if (refreshing || document.body.style.overflow === 'hidden' || window.scrollY > 1) return;
+      const touch = event.touches?.[0];
+      if (!touch) return;
+      state.startX = touch.clientX;
+      state.startY = touch.clientY;
+      state.tracking = true;
+      state.moved = false;
+    };
+
+    const onTouchMove = (event) => {
+      if (!state.tracking || pullRefreshingRef.current) return;
+      const touch = event.touches?.[0];
+      if (!touch) return;
+      const deltaY = touch.clientY - state.startY;
+      const deltaX = touch.clientX - state.startX;
+      if (deltaY <= 0 || Math.abs(deltaX) > deltaY) {
+        if (deltaY < 0) reset();
+        return;
+      }
+      if (window.scrollY > 1) {
+        reset();
+        return;
+      }
+
+      state.moved = true;
+      if (event.cancelable) event.preventDefault();
+      const nextDistance = Math.min(maxDistance, Math.round(deltaY * 0.46));
+      pullRefreshDistanceRef.current = nextDistance;
+      setPullRefreshDistance(nextDistance);
+    };
+
+    const onTouchEnd = () => {
+      const shouldRefresh = state.tracking && state.moved && pullRefreshDistanceRef.current >= threshold && !refreshing;
+      reset();
+      if (!shouldRefresh) return;
+
+      pullRefreshingRef.current = true;
+      setPullRefreshing(true);
+      void Promise.resolve(manualRefresh()).finally(() => {
+        pullRefreshingRef.current = false;
+        setPullRefreshing(false);
+      });
+    };
+
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', reset, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', reset);
+    };
+  }, [isMobile, mainTab, manualRefresh, refreshing]);
+
   const {
     handleAddGroup,
     handleUpdateGroups,
@@ -4603,6 +4718,19 @@ export default function HomePage() {
       setShowThemeTransition={setShowThemeTransition}
       mobileBottomNavHidden={mobileBottomNavHidden}
     >
+      {isMobile && mainTab === 'home' && (pullRefreshDistance > 0 || pullRefreshing) ? (
+        <div
+          className={`pull-refresh-indicator${pullRefreshing ? ' is-refreshing' : ''}`}
+          role="status"
+          aria-label="正在刷新基金数据"
+          style={{
+            opacity: pullRefreshing ? 1 : Math.min(1, pullRefreshDistance / 46),
+            transform: `translate(-50%, ${pullRefreshing ? 0 : pullRefreshDistance - 52}px)`
+          }}
+        >
+          <RefreshIcon width="17" height="17" />
+        </div>
+      ) : null}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(HOME_STRUCTURED_DATA).replace(/</g, '\\u003c') }}
