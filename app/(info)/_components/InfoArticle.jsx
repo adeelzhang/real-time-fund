@@ -1,4 +1,11 @@
-import { SITE_INFO_UPDATED_ISO, SITE_URL } from '@/app/lib/site';
+import {
+  SITE_DESCRIPTION,
+  SITE_INFO_UPDATED_ISO,
+  SITE_LOGO_URL,
+  SITE_NAME,
+  SITE_ORGANIZATION_ID,
+  SITE_URL
+} from '@/app/lib/site';
 
 const UPDATED_LABEL = '2026年7月15日';
 
@@ -20,26 +27,39 @@ export function InfoNote({ title, children }) {
   );
 }
 
-export default function InfoArticle({ label, title, description, path, schemaType = 'WebPage', children }) {
+export default function InfoArticle({
+  label,
+  title,
+  description,
+  path,
+  schemaType = 'WebPage',
+  structuredDataNodes = [],
+  children
+}) {
   const absoluteUrl = `${SITE_URL}${path}`;
+  const pageNode = {
+    '@type': schemaType,
+    '@id': `${absoluteUrl}#webpage`,
+    name: title,
+    description,
+    url: absoluteUrl,
+    inLanguage: 'zh-CN',
+    dateModified: SITE_INFO_UPDATED_ISO,
+    isPartOf: {
+      '@id': `${SITE_URL}/#website`
+    },
+    publisher: {
+      '@id': SITE_ORGANIZATION_ID
+    },
+    breadcrumb: {
+      '@id': `${absoluteUrl}#breadcrumb`
+    },
+    ...(schemaType === 'AboutPage' ? { about: { '@id': SITE_ORGANIZATION_ID } } : {})
+  };
   const structuredData = {
     '@context': 'https://schema.org',
     '@graph': [
-      {
-        '@type': schemaType,
-        '@id': `${absoluteUrl}#webpage`,
-        name: title,
-        description,
-        url: absoluteUrl,
-        inLanguage: 'zh-CN',
-        dateModified: SITE_INFO_UPDATED_ISO,
-        isPartOf: {
-          '@id': `${SITE_URL}/#website`
-        },
-        breadcrumb: {
-          '@id': `${absoluteUrl}#breadcrumb`
-        }
-      },
+      pageNode,
       {
         '@type': 'BreadcrumbList',
         '@id': `${absoluteUrl}#breadcrumb`,
@@ -57,7 +77,21 @@ export default function InfoArticle({ label, title, description, path, schemaTyp
             item: absoluteUrl
           }
         ]
-      }
+      },
+      ...(schemaType === 'AboutPage'
+        ? [
+            {
+              '@type': 'Organization',
+              '@id': SITE_ORGANIZATION_ID,
+              name: SITE_NAME,
+              alternateName: '估基基金估值',
+              url: SITE_URL,
+              description: SITE_DESCRIPTION,
+              logo: SITE_LOGO_URL
+            }
+          ]
+        : []),
+      ...structuredDataNodes
     ]
   };
 

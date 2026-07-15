@@ -45,7 +45,7 @@ import {
 } from './api/fund';
 import PcFundTable from './components/PcFundTable';
 import MobileFundTable from './components/MobileFundTable';
-import { INFO_LINKS, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from './lib/site';
+import { INFO_LINKS, SITE_DESCRIPTION, SITE_LOGO_URL, SITE_NAME, SITE_ORGANIZATION_ID, SITE_URL } from './lib/site';
 import { useTheme } from './hooks/useTheme';
 import { useTradingDay } from './hooks/useTradingDay';
 import { useHoldingProfit } from './hooks/useHoldingProfit';
@@ -85,13 +85,33 @@ const HOME_STRUCTURED_DATA = {
   '@context': 'https://schema.org',
   '@graph': [
     {
+      '@type': 'Organization',
+      '@id': SITE_ORGANIZATION_ID,
+      name: SITE_NAME,
+      alternateName: '估基基金估值',
+      url: SITE_URL,
+      description: SITE_DESCRIPTION,
+      logo: {
+        '@type': 'ImageObject',
+        '@id': `${SITE_URL}/#logo`,
+        url: SITE_LOGO_URL,
+        contentUrl: SITE_LOGO_URL,
+        width: 512,
+        height: 512,
+        caption: SITE_NAME
+      }
+    },
+    {
       '@type': 'WebSite',
       '@id': `${SITE_URL}/#website`,
       url: SITE_URL,
       name: SITE_NAME,
       alternateName: '估基基金估值',
       description: SITE_DESCRIPTION,
-      inLanguage: 'zh-CN'
+      inLanguage: 'zh-CN',
+      publisher: {
+        '@id': SITE_ORGANIZATION_ID
+      }
     },
     {
       '@type': 'WebApplication',
@@ -108,6 +128,12 @@ const HOME_STRUCTURED_DATA = {
       image: `${SITE_URL}/guji-og-1200x630.png`,
       isPartOf: {
         '@id': `${SITE_URL}/#website`
+      },
+      provider: {
+        '@id': SITE_ORGANIZATION_ID
+      },
+      publisher: {
+        '@id': SITE_ORGANIZATION_ID
       },
       offers: {
         '@type': 'Offer',

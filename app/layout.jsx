@@ -11,6 +11,26 @@ import { QueryClientProviderWrapper } from './providers/query-client-provider';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { SITE_DESCRIPTION, SITE_TITLE, SITE_URL } from './lib/site';
 
+const verificationOther = Object.fromEntries(
+  [
+    ['msvalidate.01', process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION],
+    ['baidu-site-verification', process.env.NEXT_PUBLIC_BAIDU_SITE_VERIFICATION],
+    ['360-site-verification', process.env.NEXT_PUBLIC_360_SITE_VERIFICATION],
+    ['sogou_site_verification', process.env.NEXT_PUBLIC_SOGOU_SITE_VERIFICATION],
+    ['naver-site-verification', process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION]
+  ].filter(([, value]) => Boolean(value))
+);
+
+const siteVerification = {
+  ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
+    : {}),
+  ...(process.env.NEXT_PUBLIC_YANDEX_SITE_VERIFICATION
+    ? { yandex: process.env.NEXT_PUBLIC_YANDEX_SITE_VERIFICATION }
+    : {}),
+  ...(Object.keys(verificationOther).length ? { other: verificationOther } : {})
+};
+
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: SITE_TITLE,
@@ -22,6 +42,7 @@ export const metadata = {
   creator: '估基',
   publisher: '估基',
   category: 'finance',
+  ...(Object.keys(siteVerification).length ? { verification: siteVerification } : {}),
   alternates: {
     canonical: '/'
   },

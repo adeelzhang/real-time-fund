@@ -3,6 +3,8 @@ export const SITE_NAME = '估基';
 export const SITE_TITLE = '估基 - 实时基金估值与持仓管理';
 export const SITE_DESCRIPTION =
   '估基提供实时基金估值、日内走势、前十大重仓、持仓收益和全球行情查询，支持自选基金与多端数据同步。';
+export const SITE_ORGANIZATION_ID = `${SITE_URL}/#organization`;
+export const SITE_LOGO_URL = `${SITE_URL}/guji-icon-512-v2.png`;
 export const SITE_HOME_UPDATED_ISO = '2026-07-15T00:00:00+08:00';
 export const SITE_INFO_UPDATED_ISO = '2026-07-15T00:00:00+08:00';
 

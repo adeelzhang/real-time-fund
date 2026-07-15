@@ -5,6 +5,62 @@ import { createInfoMetadata } from '@/app/lib/site';
 const title = '估基常见问题';
 const description = '解答基金搜索、实时估值、持仓记录、云端同步、数据导入导出和添加到主屏幕等常见问题。';
 
+const faqItems = [
+  {
+    question: '不登录可以使用吗？',
+    answer:
+      '可以。未登录时，基金清单、分组、持仓和显示设置默认保存在当前浏览器中。清理浏览器数据、更换设备或使用无痕模式可能导致这些本地数据无法恢复。'
+  },
+  {
+    question: '登录后会同步哪些内容？',
+    answer:
+      '邮箱验证码登录后，基金清单、分组、持仓、交易记录和主要显示设置会同步到云端。系统比较本地与远端时间戳并使用较新的版本。'
+  },
+  {
+    question: '实时估值为什么与最终净值不同？',
+    answer:
+      '实时估值是根据已披露持仓和证券行情推算的参考值，不是基金管理人确认的净值。基金调仓、持仓披露滞后、费用、汇率、跨市场时差和非股票资产都会造成差异。'
+  },
+  {
+    question: '搜索代码有结果，搜索名称没有结果怎么办？',
+    answer:
+      '可以先使用六位基金代码搜索。中文名称搜索会同时使用本地基金列表和在线搜索接口；当上游接口暂时不可用时，名称结果可能不完整。'
+  },
+  {
+    question: '行情或估值暂时没有数据怎么办？',
+    answer:
+      '先确认是否为交易日和对应市场交易时间，再检查页面显示的更新时间。网络波动、上游限流或数据源维护可能造成短暂空白。'
+  },
+  {
+    question: '如何记录持仓和收益？',
+    answer:
+      '添加基金后，可在基金列表或详情页进入持仓操作，录入份额、单位成本、交易日期和分红方式。今日收益和累计收益依赖这些输入。'
+  },
+  {
+    question: '如何备份或迁移数据？',
+    answer:
+      '在“我的 - 设置 - 数据导出”中导出配置文件，并在新设备使用“数据导入”。导出的文件包含个人持仓信息，请妥善保管。'
+  },
+  {
+    question: '如何添加到手机主屏幕？',
+    answer: '在“我的”中选择“添加到主屏幕”。iOS 使用 Safari 的共享菜单；Android 可通过 Chrome 或系统浏览器完成安装。'
+  }
+];
+
+const faqStructuredData = {
+  '@type': 'FAQPage',
+  '@id': 'https://www.myfunds.cc/help#faq',
+  inLanguage: 'zh-CN',
+  mainEntity: faqItems.map((item) => ({
+    '@type': 'Question',
+    name: item.question,
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: item.answer
+    }
+  }))
+};
+
 export const metadata = createInfoMetadata({
   title: '估基常见问题 - 基金估值与持仓管理',
   description,
@@ -13,7 +69,13 @@ export const metadata = createInfoMetadata({
 
 export default function HelpPage() {
   return (
-    <InfoArticle label="使用帮助" title={title} description={description} path="/help">
+    <InfoArticle
+      label="使用帮助"
+      title={title}
+      description={description}
+      path="/help"
+      structuredDataNodes={[faqStructuredData]}
+    >
       <InfoSection title="不登录可以使用吗？" id="use-without-login">
         <p>
           可以。未登录时，基金清单、分组、持仓和显示设置默认保存在当前浏览器中。清理浏览器数据、更换设备或使用无痕模式可能导致这些本地数据无法恢复，建议定期在设置中导出配置备份。

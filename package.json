@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "test:sync": "node --no-warnings --test app/lib/syncState.test.js",
+    "seo:indexnow": "node scripts/submit-indexnow.mjs",
+    "seo:baidu": "node scripts/submit-baidu.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "prepare": "husky"

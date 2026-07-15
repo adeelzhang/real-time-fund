@@ -38,6 +38,24 @@ npm run build -- --webpack
 
 构建产物位于 `out/`，可用 Nginx、Caddy 或任意静态服务部署。
 
+## SEO 与搜索平台
+
+站点会生成 `robots.txt`、`sitemap.xml`、结构化数据和 `llms.txt`，并显式允许主流搜索引擎及 AI 搜索爬虫访问公开页面。站长平台验证码可通过 `env.example` 中的可选环境变量注入。
+
+部署完成后，可将 sitemap 中的公开链接主动通知给支持 IndexNow 的搜索引擎：
+
+```bash
+npm run seo:indexnow
+```
+
+百度站点验证完成并取得普通收录 API token 后，可执行：
+
+```bash
+BAIDU_SITE_TOKEN=your_token npm run seo:baidu
+```
+
+Google Search Console、Bing Webmaster Tools、百度搜索资源平台、360 搜索站长平台、搜狗开放平台和 Yandex Webmaster 仍需使用站点所有者账号完成首次验证并提交 `https://www.myfunds.cc/sitemap.xml`。
+
 ## Docker
 
 ```bash
