@@ -13,7 +13,20 @@ test('normalizeFundNavRows parses, filters, deduplicates, and sorts mobile API r
     ]),
     [
       { date: '2026-07-14', nav: 7.9949, growth: 10.09, dividend: null },
-      { date: '2026-07-15', nav: 7.7386, growth: null, dividend: null }
+      { date: '2026-07-15', nav: 7.7386, growth: -3.21, dividend: null }
+    ]
+  );
+});
+
+test('normalizeFundNavRows derives missing growth from the previous confirmed nav', () => {
+  assert.deepEqual(
+    normalizeFundNavRows([
+      { FSRQ: '2026-07-14', DWJZ: '4.0000', JZZZL: '0.25' },
+      { FSRQ: '2026-07-15', DWJZ: '3.8000', JZZZL: '--' }
+    ]),
+    [
+      { date: '2026-07-14', nav: 4, growth: 0.25, dividend: null },
+      { date: '2026-07-15', nav: 3.8, growth: -5.000000000000004, dividend: null }
     ]
   );
 });

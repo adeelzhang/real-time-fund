@@ -9,15 +9,30 @@ export function normalizeFundNavRows(rows) {
 
     const growthRaw = row?.JZZZL ?? row?.growth;
     const growth = growthRaw == null || growthRaw === '' || growthRaw === '--' ? null : Number(growthRaw);
+    const previous = byDate.get(date);
     byDate.set(date, {
       date,
       nav,
-      growth: Number.isFinite(growth) ? growth : null,
-      dividend: row?.dividend == null || !Number.isFinite(Number(row.dividend)) ? null : Number(row.dividend)
+      // 同一净值日偶尔会出现补充记录，后者缺少涨跌幅时不能把已取得的有效值覆盖掉。
+      growth: Number.isFinite(growth) ? growth : (previous?.growth ?? null),
+      dividend:
+        row?.dividend == null || !Number.isFinite(Number(row.dividend))
+          ? (previous?.dividend ?? null)
+          : Number(row.dividend)
     });
   }
 
-  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+  const normalized = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+  return normalized.map((row, index) => {
+    if (Number.isFinite(row.growth) || index === 0) return row;
+    const previous = normalized[index - 1];
+    if (!Number.isFinite(previous?.nav) || previous.nav <= 0) return row;
+    return {
+      ...row,
+      growth: ((row.nav - previous.nav) / previous.nav) * 100
+    };
+  });
 }
 
 export function parseFundDividend(raw) {
