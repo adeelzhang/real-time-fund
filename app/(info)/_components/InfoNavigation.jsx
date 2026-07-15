@@ -68,6 +68,7 @@ export default function InfoNavigation() {
         <Link
           className="info-nav-action"
           href="/"
+          prefetch={false}
           aria-label="返回估基首页"
           onNavigate={() => {
             sessionStorage.removeItem('guji-info-return');

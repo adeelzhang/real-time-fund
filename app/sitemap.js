@@ -1,4 +1,4 @@
-import { INFO_LINKS, SITE_INFO_UPDATED_ISO, SITE_URL } from './lib/site';
+import { INFO_LINKS, SITE_HOME_UPDATED_ISO, SITE_INFO_UPDATED_ISO, SITE_URL } from './lib/site';
 
 export const dynamic = 'force-static';
 
@@ -7,7 +7,7 @@ export default function sitemap() {
   return [
     {
       url: SITE_URL,
-      lastModified: new Date(),
+      lastModified: new Date(SITE_HOME_UPDATED_ISO),
       changeFrequency: 'daily',
       priority: 1
     },

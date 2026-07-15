@@ -10,32 +10,13 @@ import GlobalClientErrorHandler from './components/GlobalClientErrorHandler';
 import { QueryClientProviderWrapper } from './providers/query-client-provider';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { SITE_DESCRIPTION, SITE_TITLE, SITE_URL } from './lib/site';
-const STRUCTURED_DATA = {
-  '@context': 'https://schema.org',
-  '@type': 'WebApplication',
-  name: '估基',
-  alternateName: '估基基金估值',
-  url: SITE_URL,
-  description: SITE_DESCRIPTION,
-  applicationCategory: 'FinanceApplication',
-  applicationSubCategory: '基金估值与持仓管理',
-  operatingSystem: 'Web, iOS, Android',
-  browserRequirements: 'Requires JavaScript. Requires HTML5.',
-  inLanguage: 'zh-CN',
-  image: `${SITE_URL}/guji-og-1200x630.png`,
-  offers: {
-    '@type': 'Offer',
-    price: '0',
-    priceCurrency: 'CNY'
-  },
-  featureList: ['实时基金估值', '基金日内走势', '前十大重仓走势', '持仓收益管理', '全球行情查询']
-};
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: SITE_TITLE,
   description: SITE_DESCRIPTION,
   applicationName: '估基',
+  manifest: '/manifest.webmanifest?v=20260714',
   keywords: ['基金估值', '实时估值', '基金净值', '基金持仓', '基金收益', '重仓股', '全球行情'],
   authors: [{ name: '估基', url: SITE_URL }],
   creator: '估基',
@@ -85,6 +66,13 @@ export const metadata = {
   }
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#0f172a'
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
@@ -98,14 +86,6 @@ export default function RootLayout({ children }) {
         <link rel="icon" type="image/png" sizes="192x192" href="/guji-icon-192-v2.png" />
         <link rel="apple-touch-icon" href="/guji-icon-180-v2.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/guji-icon-180-v2.png" />
-        <link rel="manifest" href="/manifest.webmanifest?v=20260714" />
-        {/* 初始为暗色；ThemeColorSync 会按 data-theme 同步为亮/暗 */}
-        <meta name="theme-color" content="#0f172a" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA).replace(/</g, '\\u003c') }}
-        />
         {/* 尽早设置 data-theme，减少首屏主题闪烁；与 suppressHydrationWarning 配合避免服务端/客户端 html 属性不一致报错 */}
         <script
           dangerouslySetInnerHTML={{

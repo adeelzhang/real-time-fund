@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useMemo, useCallback, useTransition, useDeferredValue } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import SearchBar from './components/SearchBar';
 import SummaryTabContent from './components/SummaryTabContent';
 import FundListView from './components/FundListView';
@@ -43,12 +45,7 @@ import {
 } from './api/fund';
 import PcFundTable from './components/PcFundTable';
 import MobileFundTable from './components/MobileFundTable';
-import MobileBottomNav from './components/MobileBottomNav';
-import MineTab from './components/MineTab';
-import MarketTab from './components/MarketTab';
-import GlobalMarketTab from './components/GlobalMarketTab';
-import PcSideNav from './components/PcSideNav';
-import { INFO_LINKS } from './lib/site';
+import { INFO_LINKS, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from './lib/site';
 import { useTheme } from './hooks/useTheme';
 import { useTradingDay } from './hooks/useTradingDay';
 import { useHoldingProfit } from './hooks/useHoldingProfit';
@@ -70,6 +67,57 @@ import {
   useSettingsStore
 } from './stores';
 import ModalsLayer from './components/ModalsLayer';
+
+function TabCodeLoading() {
+  return (
+    <div className="tab-code-loading" role="status" aria-live="polite">
+      <span className="tab-code-loading-spinner" aria-hidden="true" />
+      <span>正在加载</span>
+    </div>
+  );
+}
+
+const MineTab = dynamic(() => import('./components/MineTab'), { loading: TabCodeLoading });
+const MarketTab = dynamic(() => import('./components/MarketTab'), { loading: TabCodeLoading });
+const GlobalMarketTab = dynamic(() => import('./components/GlobalMarketTab'), { loading: TabCodeLoading });
+
+const HOME_STRUCTURED_DATA = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      '@id': `${SITE_URL}/#website`,
+      url: SITE_URL,
+      name: SITE_NAME,
+      alternateName: '估基基金估值',
+      description: SITE_DESCRIPTION,
+      inLanguage: 'zh-CN'
+    },
+    {
+      '@type': 'WebApplication',
+      '@id': `${SITE_URL}/#webapp`,
+      name: SITE_NAME,
+      alternateName: '估基基金估值',
+      url: SITE_URL,
+      description: SITE_DESCRIPTION,
+      applicationCategory: 'FinanceApplication',
+      applicationSubCategory: '基金估值与持仓管理',
+      operatingSystem: 'Web, iOS, Android',
+      browserRequirements: 'Requires JavaScript. Requires HTML5.',
+      inLanguage: 'zh-CN',
+      image: `${SITE_URL}/guji-og-1200x630.png`,
+      isPartOf: {
+        '@id': `${SITE_URL}/#website`
+      },
+      offers: {
+        '@type': 'Offer',
+        price: '0',
+        priceCurrency: 'CNY'
+      },
+      featureList: ['实时基金估值', '基金日内走势', '前十大重仓走势', '持仓收益管理', '全球行情查询']
+    }
+  ]
+};
 
 import {
   DEFAULT_SORT_RULES,
@@ -384,6 +432,7 @@ export default function HomePage() {
   }, [gaussianBlurEnabled]);
   const [hasVisitedMarketTab, setHasVisitedMarketTab] = useState(false);
   const [hasVisitedGlobalTab, setHasVisitedGlobalTab] = useState(false);
+  const [hasVisitedMineTab, setHasVisitedMineTab] = useState(false);
 
   useEffect(() => {
     if (mainTab === 'market' && !hasVisitedMarketTab) {
@@ -396,6 +445,12 @@ export default function HomePage() {
       setHasVisitedGlobalTab(true);
     }
   }, [mainTab, hasVisitedGlobalTab]);
+
+  useEffect(() => {
+    if (mainTab === 'mine' && !hasVisitedMineTab) {
+      setHasVisitedMineTab(true);
+    }
+  }, [mainTab, hasVisitedMineTab]);
 
   const [mobileBottomNavHidden, setMobileBottomNavHidden] = useState(false);
   const lastScrollYRef = useRef(0);
@@ -4521,6 +4576,10 @@ export default function HomePage() {
       setShowThemeTransition={setShowThemeTransition}
       mobileBottomNavHidden={mobileBottomNavHidden}
     >
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(HOME_STRUCTURED_DATA).replace(/</g, '\\u003c') }}
+      />
       <div
         className="mobile-main-tab-panel mobile-main-tab-panel--home"
         style={{ display: mobileHomeTabVisible ? 'contents' : 'none' }}
@@ -5277,21 +5336,16 @@ export default function HomePage() {
             />
 
             <div className="footer">
-              {!isMobile && (
-                <>
-                  <p style={{ marginBottom: 8 }}>
-                    数据源：实时估值与重仓直连东方财富，仅供个人学习及参考使用。数据可能存在延迟，不作为任何投资建议
-                  </p>
-                  <p style={{ marginBottom: 12 }}>注：估算数据与真实结算数据会有1%左右误差，非股票型基金误差较大</p>
-                  <nav className="site-info-links" aria-label="站点信息">
-                    {INFO_LINKS.map((item) => (
-                      <a key={item.href} href={item.href}>
-                        {item.label}
-                      </a>
-                    ))}
-                  </nav>
-                </>
-              )}
+              <p className="footer-description">
+                估基提供实时基金估值、日内走势、持仓收益与全球行情查询。估值和行情数据可能延迟，仅供参考，不构成投资建议。
+              </p>
+              <nav className="site-info-links" aria-label="站点信息">
+                {INFO_LINKS.map((item) => (
+                  <Link key={item.href} href={item.href} prefetch={false}>
+                    {item.label}
+                  </Link>
+                ))}
+              </nav>
             </div>
           </div>
           {hasVisitedMarketTab && (
@@ -5311,18 +5365,20 @@ export default function HomePage() {
           )}
         </>
       </div>
-      <MineTab
-        visible={mainTab === 'mine'}
-        user={user}
-        userAvatar={userAvatar}
-        lastSyncDisplay={lastSyncTime ? dayjs(lastSyncTime).format('MM-DD HH:mm') : null}
-        isSyncing={isSyncing}
-        onLogin={handleOpenLogin}
-        onLogout={handleLogout}
-        onSync={() => user?.id && syncUserConfig(user.id)}
-        onMyEarnings={() => setPortfolioEarningsOpen(true)}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
+      {hasVisitedMineTab && (
+        <MineTab
+          visible={mainTab === 'mine'}
+          user={user}
+          userAvatar={userAvatar}
+          lastSyncDisplay={lastSyncTime ? dayjs(lastSyncTime).format('MM-DD HH:mm') : null}
+          isSyncing={isSyncing}
+          onLogin={handleOpenLogin}
+          onLogout={handleLogout}
+          onSync={() => user?.id && syncUserConfig(user.id)}
+          onMyEarnings={() => setPortfolioEarningsOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
+      )}
       {/* 弹框渲染层 - 独立组件，订阅 useModalStore，不触发 page.jsx 重渲染 */}
       <ModalsLayer callbacksRef={modalCbRef} />
     </NavLayout>

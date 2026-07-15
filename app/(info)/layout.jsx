@@ -17,7 +17,7 @@ export default function InfoLayout({ children }) {
         <div className="info-site-footer-inner">
           <nav className="info-footer-links" aria-label="站点信息">
             {INFO_LINKS.map((item) => (
-              <Link key={item.href} href={item.href}>
+              <Link key={item.href} href={item.href} prefetch={false}>
                 {item.label}
               </Link>
             ))}

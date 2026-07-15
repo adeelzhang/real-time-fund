@@ -1,4 +1,4 @@
-import { SITE_INFO_UPDATED_ISO, SITE_NAME, SITE_URL } from '@/app/lib/site';
+import { SITE_INFO_UPDATED_ISO, SITE_URL } from '@/app/lib/site';
 
 const UPDATED_LABEL = '2026年7月15日';
 
@@ -27,19 +27,22 @@ export default function InfoArticle({ label, title, description, path, schemaTyp
     '@graph': [
       {
         '@type': schemaType,
+        '@id': `${absoluteUrl}#webpage`,
         name: title,
         description,
         url: absoluteUrl,
         inLanguage: 'zh-CN',
         dateModified: SITE_INFO_UPDATED_ISO,
         isPartOf: {
-          '@type': 'WebSite',
-          name: SITE_NAME,
-          url: SITE_URL
+          '@id': `${SITE_URL}/#website`
+        },
+        breadcrumb: {
+          '@id': `${absoluteUrl}#breadcrumb`
         }
       },
       {
         '@type': 'BreadcrumbList',
+        '@id': `${absoluteUrl}#breadcrumb`,
         itemListElement: [
           {
             '@type': 'ListItem',

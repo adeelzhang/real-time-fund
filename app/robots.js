@@ -1,4 +1,4 @@
-const SITE_URL = 'https://www.myfunds.cc';
+import { SITE_URL } from './lib/site';
 
 export const dynamic = 'force-static';
 
