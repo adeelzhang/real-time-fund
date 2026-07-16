@@ -29,6 +29,8 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUP
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY", "")
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 GEOIP_DB_PATH = os.environ.get("GEOIP_DB_PATH", "/data/geoip/DBIP-City-Lite.mmdb")
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+WORLD_LAND_PATH = os.path.join(STATIC_DIR, "world-land.json")
 MAX_BODY = 16 * 1024
 MARKET_MAX_BODY = 1024
 AUTH_CACHE_TTL = 45
@@ -299,6 +301,21 @@ def text_response(handler, text, status=HTTPStatus.OK, content_type="text/html; 
     handler.send_header("Content-Type", content_type)
     handler.send_header("Cache-Control", "no-store")
     handler.send_header("X-Frame-Options", "DENY")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def static_file_response(handler, path, content_type):
+    try:
+        with open(path, "rb") as file:
+            body = file.read()
+    except OSError:
+        json_response(handler, {"ok": False, "error": "not found"}, HTTPStatus.NOT_FOUND)
+        return
+    handler.send_response(HTTPStatus.OK)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Cache-Control", "public, max-age=31536000, immutable")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
     handler.wfile.write(body)
@@ -1276,14 +1293,16 @@ OPS_HTML = r"""<!doctype html>
       min-height: 260px;
       margin-top: 14px;
       overflow: hidden;
-      border: 1px solid #dce5f1;
+      border: 1px solid #c8dff5;
       border-radius: 8px;
-      background: #f8fbff;
+      background: #edf7ff;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .72);
     }
     .world-map svg { display: block; width: 100%; height: 100%; }
-    .map-grid { fill: none; stroke: #dce7f5; stroke-width: 1; }
-    .map-land { fill: #e5edf7; stroke: #c9d7e7; stroke-width: 1.3; stroke-linejoin: round; }
-    .map-land.detail { fill: #edf3f9; }
+    .map-grid { fill: none; stroke: #cce2f4; stroke-width: 1; opacity: .86; }
+    .map-equator { fill: none; stroke: #a8cae9; stroke-width: 1.2; stroke-dasharray: 5 5; }
+    .map-land { fill: #dcebd9; stroke: #a9c8ae; stroke-width: 1.1; stroke-linejoin: round; fill-rule: evenodd; }
+    .map-label { fill: #7d99af; font-size: 15px; font-weight: 650; letter-spacing: 0; opacity: .88; text-anchor: middle; }
     .geo-points { position: absolute; inset: 0; }
     .geo-point {
       position: absolute;
@@ -1307,11 +1326,11 @@ OPS_HTML = r"""<!doctype html>
       max-height: 24px;
       border: 2px solid #fff;
       border-radius: 50%;
-      background: var(--blue);
-      box-shadow: 0 2px 8px rgba(37, 99, 235, .42);
+      background: #e45b47;
+      box-shadow: 0 2px 8px rgba(190, 60, 40, .45);
       transition: transform .14s ease, background .14s ease;
     }
-    .geo-point:hover .geo-point-dot, .geo-point:focus-visible .geo-point-dot { transform: scale(1.28); background: var(--rose); }
+    .geo-point:hover .geo-point-dot, .geo-point:focus-visible .geo-point-dot { transform: scale(1.28); background: #b91c1c; }
     .geo-point-tooltip {
       position: absolute;
       z-index: 3;
@@ -1438,15 +1457,11 @@ OPS_HTML = r"""<!doctype html>
           </div>
         </div>
         <div class="world-map" id="worldMap">
-          <svg viewBox="0 0 1200 600" preserveAspectRatio="none" aria-hidden="true">
+          <svg id="worldMapSvg" viewBox="0 0 1200 600" preserveAspectRatio="none" role="img" aria-label="全球访问分布地图">
             <path class="map-grid" d="M0 100H1200 M0 200H1200 M0 300H1200 M0 400H1200 M0 500H1200 M100 0V600 M200 0V600 M300 0V600 M400 0V600 M500 0V600 M600 0V600 M700 0V600 M800 0V600 M900 0V600 M1000 0V600 M1100 0V600" />
-            <path class="map-land" d="M75 123 L140 84 L212 88 L260 117 L292 111 L337 142 L352 183 L326 205 L304 190 L278 217 L244 219 L229 255 L197 277 L177 262 L155 278 L122 263 L102 226 L82 211 L91 176 Z" />
-            <path class="map-land" d="M313 255 L350 268 L370 306 L390 337 L382 389 L365 432 L342 473 L319 454 L304 409 L286 374 L292 327 Z" />
-            <path class="map-land detail" d="M237 47 L265 23 L303 32 L324 67 L301 93 L260 84 Z" />
-            <path class="map-land" d="M474 154 L509 142 L537 159 L558 150 L581 165 L597 146 L623 160 L644 150 L675 167 L716 153 L748 171 L790 159 L829 181 L865 183 L909 210 L930 245 L911 272 L879 267 L852 289 L813 276 L782 294 L748 281 L718 300 L681 288 L648 307 L614 289 L582 301 L545 284 L509 286 L488 253 L456 238 L449 201 Z" />
-            <path class="map-land" d="M503 261 L544 276 L568 317 L559 359 L575 401 L555 458 L521 493 L484 465 L470 421 L451 391 L456 340 L479 301 Z" />
-            <path class="map-land" d="M822 358 L873 342 L925 361 L955 396 L942 434 L898 453 L852 436 L822 403 Z" />
-            <path class="map-land detail" d="M950 459 L968 468 L977 493 L961 510 L946 493 Z M1000 494 L1018 502 L1022 523 L1006 535 L993 517 Z M738 314 L746 310 L752 324 L746 337 L738 332 Z M760 322 L769 316 L778 329 L771 343 L760 339 Z M583 289 L595 293 L597 307 L585 311 L576 300 Z" />
+            <path class="map-equator" d="M0 300H1200" />
+            <path class="map-land" id="worldLand" />
+            <g class="map-label" aria-hidden="true"><text x="270" y="205">北美洲</text><text x="385" y="410">南美洲</text><text x="590" y="210">欧洲</text><text x="575" y="365">非洲</text><text x="810" y="235">亚洲</text><text x="970" y="415">大洋洲</text></g>
           </svg>
           <div class="geo-points" id="geoPoints"></div>
           <div class="map-empty" id="geoMapEmpty">访问发生后将在这里显示地区分布</div>
@@ -1500,7 +1515,59 @@ OPS_HTML = r"""<!doctype html>
     function escapeHtml(s) {
       return String(s || '').replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
     }
+    let worldMapLoadPromise = null;
+    function projectWorldCoordinate(point) {
+      const longitude = Number(point[0]);
+      const latitude = Number(point[1]);
+      if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null;
+      return {
+        x: ((longitude + 180) / 360) * 1200,
+        y: ((90 - latitude) / 180) * 600,
+        longitude
+      };
+    }
+    function worldRingPath(ring) {
+      let path = '';
+      let previous = null;
+      for (const point of ring || []) {
+        const projected = projectWorldCoordinate(point);
+        if (!projected) continue;
+        const crossesDateLine = previous && Math.abs(projected.longitude - previous.longitude) > 180;
+        path += !previous || crossesDateLine
+          ? `M ${projected.x.toFixed(2)} ${projected.y.toFixed(2)}`
+          : ` L ${projected.x.toFixed(2)} ${projected.y.toFixed(2)}`;
+        previous = projected;
+      }
+      return path ? `${path} Z` : '';
+    }
+    function worldGeometryPath(geometry) {
+      if (!geometry) return '';
+      const polygons = geometry.type === 'Polygon'
+        ? [geometry.coordinates]
+        : geometry.type === 'MultiPolygon'
+          ? geometry.coordinates
+          : [];
+      return polygons.map((polygon) => polygon.map(worldRingPath).join('')).join('');
+    }
+    function loadWorldMap() {
+      if (worldMapLoadPromise) return worldMapLoadPromise;
+      worldMapLoadPromise = fetch('/assets/world-land.json', { cache: 'force-cache' })
+        .then((response) => {
+          if (!response.ok) throw new Error(`world map ${response.status}`);
+          return response.json();
+        })
+        .then((data) => {
+          const path = (data.features || []).map((feature) => worldGeometryPath(feature.geometry)).join('');
+          if (!path) throw new Error('world map is empty');
+          $('worldLand').setAttribute('d', path);
+        })
+        .catch(() => {
+          worldMapLoadPromise = null;
+        });
+      return worldMapLoadPromise;
+    }
     function renderGeoMap(geo) {
+      loadWorldMap();
       const data = geo || {};
       const points = Array.isArray(data.points) ? data.points : [];
       const layer = $('geoPoints');
@@ -1758,6 +1825,9 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/health":
             json_response(self, {"ok": True, "service": "guji-analytics"})
             return
+        if parsed.path == "/assets/world-land.json":
+            static_file_response(self, WORLD_LAND_PATH, "application/geo+json; charset=utf-8")
+            return
         if parsed.path in {"/", "/ops", "/ops/"}:
             text_response(self, OPS_HTML)
             return
@@ -1781,7 +1851,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_HEAD(self):
         parsed = urlparse(self.path)
-        if parsed.path in {"/", "/ops", "/ops/", "/health", "/api/analytics/stats"}:
+        if parsed.path in {"/", "/ops", "/ops/", "/health", "/assets/world-land.json", "/api/analytics/stats"}:
             head_response(self)
             return
         head_response(self, HTTPStatus.NOT_FOUND, "application/json; charset=utf-8")
