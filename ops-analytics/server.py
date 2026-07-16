@@ -1,4 +1,5 @@
 import hashlib
+import ipaddress
 import json
 import hmac
 import os
@@ -13,14 +14,21 @@ from urllib import request as urllib_request
 from urllib.parse import parse_qs, urlencode, urlparse
 from zoneinfo import ZoneInfo
 
+try:
+    import maxminddb
+except ImportError:
+    maxminddb = None
+
 
 DB_PATH = os.environ.get("DB_PATH", "/data/analytics.sqlite3")
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 ANALYTICS_SALT = os.environ.get("ANALYTICS_SALT", "guji")
 STATS_TZ = os.environ.get("STATS_TZ", "Asia/Shanghai")
 SUPABASE_URL = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY", "")
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+GEOIP_DB_PATH = os.environ.get("GEOIP_DB_PATH", "/data/geoip/DBIP-City-Lite.mmdb")
 MAX_BODY = 16 * 1024
 MARKET_MAX_BODY = 1024
 AUTH_CACHE_TTL = 45
@@ -84,6 +92,9 @@ RATE_LIMITS = {}
 RATE_LIMIT_LOCK = threading.Lock()
 GLOBAL_QUOTES_CACHE = {"expires_at": 0.0, "data": None}
 GLOBAL_QUOTES_CACHE_LOCK = threading.Lock()
+GEOIP_READER = None
+GEOIP_READER_PATH = ""
+GEOIP_READER_LOCK = threading.Lock()
 
 
 def now_ts():
@@ -144,11 +155,21 @@ def init_db():
               first_seen INTEGER NOT NULL,
               last_seen INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS geo_cache (
+              ip_hash TEXT PRIMARY KEY,
+              country_code TEXT,
+              country_name TEXT,
+              city TEXT,
+              latitude REAL,
+              longitude REAL,
+              updated_at INTEGER NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
             CREATE INDEX IF NOT EXISTS idx_events_type_ts ON events(event_type, ts);
             CREATE INDEX IF NOT EXISTS idx_events_visitor_ts ON events(visitor_id, ts);
             CREATE INDEX IF NOT EXISTS idx_visitors_last_seen ON visitors(last_seen);
             CREATE INDEX IF NOT EXISTS idx_sessions_last_seen ON sessions(last_seen);
+            CREATE INDEX IF NOT EXISTS idx_geo_cache_coordinates ON geo_cache(latitude, longitude);
             """
         )
 
@@ -160,14 +181,111 @@ def ip_hash(raw_ip):
     return hashlib.sha256(f"{ANALYTICS_SALT}:{ip}".encode("utf-8")).hexdigest()
 
 
+def get_geoip_reader():
+    """Open the local GeoIP database once; visitor IPs never leave this process."""
+    global GEOIP_READER, GEOIP_READER_PATH
+
+    if maxminddb is None or not GEOIP_DB_PATH or not os.path.isfile(GEOIP_DB_PATH):
+        return None
+
+    with GEOIP_READER_LOCK:
+        if GEOIP_READER is not None and GEOIP_READER_PATH == GEOIP_DB_PATH:
+            return GEOIP_READER
+        try:
+            GEOIP_READER = maxminddb.open_database(GEOIP_DB_PATH)
+            GEOIP_READER_PATH = GEOIP_DB_PATH
+        except Exception as err:
+            print(f"GeoIP database unavailable: {sanitize(err, 160)}", flush=True)
+            GEOIP_READER = None
+            GEOIP_READER_PATH = ""
+        return GEOIP_READER
+
+
+def geo_text(value):
+    if not isinstance(value, dict):
+        return sanitize(value, 96)
+    names = value.get("names")
+    if isinstance(names, dict):
+        for language in ("zh-CN", "zh", "en"):
+            if names.get(language):
+                return sanitize(names[language], 96)
+    return sanitize(value.get("name"), 96)
+
+
+def lookup_geoip(raw_ip):
+    """Resolve an internet-routable address with the on-disk city database only."""
+    try:
+        address = ipaddress.ip_address(raw_ip)
+    except ValueError:
+        return None
+    if not address.is_global:
+        return None
+
+    reader = get_geoip_reader()
+    if reader is None:
+        return None
+    try:
+        record = reader.get(str(address)) or {}
+        country = record.get("country") or record.get("registered_country") or {}
+        location = record.get("location") or {}
+        latitude = float(location.get("latitude"))
+        longitude = float(location.get("longitude"))
+    except (TypeError, ValueError, AttributeError):
+        return None
+    except Exception as err:
+        print(f"GeoIP lookup failed: {sanitize(err, 160)}", flush=True)
+        return None
+
+    if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+        return None
+    return {
+        "country_code": sanitize(country.get("iso_code"), 8).upper(),
+        "country_name": geo_text(country),
+        "city": geo_text(record.get("city")),
+        # City-level sources are already approximate. Keep an additional coarse
+        # precision so the console cannot be used to infer a household location.
+        "latitude": round(latitude, 1),
+        "longitude": round(longitude, 1),
+    }
+
+
+def cache_geoip(conn, raw_ip, hashed_ip, ts):
+    """Persist only an anonymous, coarse lookup result (or a one-time miss)."""
+    if not hashed_ip:
+        return
+    known = conn.execute("SELECT 1 FROM geo_cache WHERE ip_hash=?", (hashed_ip,)).fetchone()
+    if known:
+        return
+
+    geo = lookup_geoip(raw_ip) or {}
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO geo_cache
+          (ip_hash, country_code, country_name, city, latitude, longitude, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            hashed_ip,
+            geo.get("country_code", ""),
+            geo.get("country_name", ""),
+            geo.get("city", ""),
+            geo.get("latitude"),
+            geo.get("longitude"),
+            ts,
+        ),
+    )
+
+
 def json_response(handler, data, status=HTTPStatus.OK, extra_headers=None):
     body = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Cache-Control", "no-store")
-    handler.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
     handler.send_header("Access-Control-Allow-Origin", "*")
-    handler.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password, Authorization, apikey")
+    handler.send_header(
+        "Access-Control-Allow-Headers",
+        "Content-Type, X-Admin-Username, X-Admin-Password, Authorization, apikey",
+    )
     for key, value in (extra_headers or {}).items():
         handler.send_header(key, str(value))
     handler.send_header("Content-Length", str(len(body)))
@@ -180,7 +298,6 @@ def text_response(handler, text, status=HTTPStatus.OK, content_type="text/html; 
     handler.send_response(status)
     handler.send_header("Content-Type", content_type)
     handler.send_header("Cache-Control", "no-store")
-    handler.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
     handler.send_header("X-Frame-Options", "DENY")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
@@ -191,16 +308,18 @@ def head_response(handler, status=HTTPStatus.OK, content_type="text/html; charse
     handler.send_response(status)
     handler.send_header("Content-Type", content_type)
     handler.send_header("Cache-Control", "no-store")
-    handler.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
     handler.send_header("X-Frame-Options", "DENY")
     handler.end_headers()
 
 
 def is_authorized(handler):
-    if not ADMIN_PASSWORD:
+    if not ADMIN_USERNAME or not ADMIN_PASSWORD:
         return False
+    supplied_username = handler.headers.get("X-Admin-Username", "")
     supplied_password = handler.headers.get("X-Admin-Password", "")
-    return hmac.compare_digest(supplied_password, ADMIN_PASSWORD)
+    username_matches = hmac.compare_digest(supplied_username, ADMIN_USERNAME)
+    password_matches = hmac.compare_digest(supplied_password, ADMIN_PASSWORD)
+    return username_matches and password_matches
 
 
 def get_bearer_token(handler):
@@ -591,6 +710,68 @@ def daily_series(conn, end_dt):
     return series
 
 
+def weekly_geo_summary(conn, start_ts):
+    total_ips = count_row(
+        conn,
+        """
+        SELECT COUNT(DISTINCT ip_hash)
+        FROM events
+        WHERE event_type='pageview' AND ts>=? AND ip_hash<>''
+        """,
+        (start_ts,),
+    )
+    located_ips = count_row(
+        conn,
+        """
+        SELECT COUNT(DISTINCT e.ip_hash)
+        FROM events e
+        INNER JOIN geo_cache g ON g.ip_hash=e.ip_hash
+        WHERE e.event_type='pageview' AND e.ts>=? AND g.latitude IS NOT NULL AND g.longitude IS NOT NULL
+        """,
+        (start_ts,),
+    )
+    rows = conn.execute(
+        """
+        SELECT
+          g.country_code,
+          COALESCE(NULLIF(g.country_name, ''), '未知地区') AS country_name,
+          COALESCE(NULLIF(g.city, ''), '城市级区域') AS city,
+          g.latitude,
+          g.longitude,
+          COUNT(*) AS pv,
+          COUNT(DISTINCT e.visitor_id) AS uv,
+          COUNT(DISTINCT e.ip_hash) AS ips
+        FROM events e
+        INNER JOIN geo_cache g ON g.ip_hash=e.ip_hash
+        WHERE e.event_type='pageview' AND e.ts>=? AND g.latitude IS NOT NULL AND g.longitude IS NOT NULL
+        GROUP BY g.country_code, g.country_name, g.city, g.latitude, g.longitude
+        ORDER BY pv DESC, ips DESC
+        LIMIT 250
+        """,
+        (start_ts,),
+    ).fetchall()
+    points = [
+        {
+            "countryCode": row["country_code"],
+            "country": row["country_name"],
+            "city": row["city"],
+            "lat": float(row["latitude"]),
+            "lng": float(row["longitude"]),
+            "pv": int(row["pv"]),
+            "uv": int(row["uv"]),
+            "ips": int(row["ips"]),
+        }
+        for row in rows
+    ]
+    return {
+        "available": get_geoip_reader() is not None,
+        "totalIps": total_ips,
+        "locatedIps": located_ips,
+        "points": points,
+        "topLocations": points[:10],
+    }
+
+
 def build_stats():
     tz = get_tz()
     now = datetime.now(tz)
@@ -664,6 +845,7 @@ def build_stats():
                 "hourly": hourly_series(conn, now),
                 "daily": daily_series(conn, now),
             },
+            "geoWeekly": weekly_geo_summary(conn, seven_start),
             "topPages": top_pages,
             "topReferrers": top_referrers,
             "latest": latest,
@@ -725,6 +907,8 @@ def record_event(handler):
     }
 
     with get_db() as conn:
+        if event_type == "pageview":
+            cache_geoip(conn, raw_ip, row["ip_hash"], ts)
         conn.execute(
             """
             INSERT INTO events (ts,event_type,visitor_id,session_id,path,referrer,title,user_agent,ip_hash,screen,tz)
@@ -988,7 +1172,7 @@ OPS_HTML = r"""<!doctype html>
     }
     h1 { margin: 0; font-size: 20px; }
     main { width: min(1280px, 100%); margin: 0 auto; padding: 24px; }
-    .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0; }
     input, button {
       height: 40px;
       border-radius: 8px;
@@ -997,6 +1181,8 @@ OPS_HTML = r"""<!doctype html>
       font: inherit;
     }
     input { min-width: min(360px, 80vw); background: #fff; color: var(--text); }
+    #username { min-width: min(220px, 80vw); }
+    #password { min-width: min(280px, 80vw); }
     button { cursor: pointer; background: var(--text); color: #fff; font-weight: 650; }
     button.secondary { background: #fff; color: var(--text); }
     .status { color: var(--muted); font-size: 13px; }
@@ -1080,6 +1266,87 @@ OPS_HTML = r"""<!doctype html>
     .chart-tooltip .pv-value { color: var(--blue); }
     .chart-tooltip .uv-value { color: var(--green); }
     .chart-empty { fill: var(--muted); font-size: 13px; text-anchor: middle; }
+    .geo-grid { grid-template-columns: 2fr 1fr; }
+    .geo-panel { overflow: hidden; }
+    .geo-map-meta { margin-top: 3px; color: var(--muted); font-size: 12px; }
+    .world-map {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 2 / 1;
+      min-height: 260px;
+      margin-top: 14px;
+      overflow: hidden;
+      border: 1px solid #dce5f1;
+      border-radius: 8px;
+      background: #f8fbff;
+    }
+    .world-map svg { display: block; width: 100%; height: 100%; }
+    .map-grid { fill: none; stroke: #dce7f5; stroke-width: 1; }
+    .map-land { fill: #e5edf7; stroke: #c9d7e7; stroke-width: 1.3; stroke-linejoin: round; }
+    .map-land.detail { fill: #edf3f9; }
+    .geo-points { position: absolute; inset: 0; }
+    .geo-point {
+      position: absolute;
+      z-index: 2;
+      display: grid;
+      width: 32px;
+      height: 32px;
+      place-items: center;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--text);
+      transform: translate(-50%, -50%);
+    }
+    .geo-point-dot {
+      display: block;
+      width: var(--size, 10px);
+      height: var(--size, 10px);
+      max-width: 24px;
+      max-height: 24px;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 2px 8px rgba(37, 99, 235, .42);
+      transition: transform .14s ease, background .14s ease;
+    }
+    .geo-point:hover .geo-point-dot, .geo-point:focus-visible .geo-point-dot { transform: scale(1.28); background: var(--rose); }
+    .geo-point-tooltip {
+      position: absolute;
+      z-index: 3;
+      bottom: calc(100% + 5px);
+      left: 50%;
+      display: none;
+      width: max-content;
+      max-width: 210px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .98);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, .16);
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.4;
+      text-align: left;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+    .geo-point:hover .geo-point-tooltip, .geo-point:focus-visible .geo-point-tooltip { display: block; }
+    .geo-point-tooltip span { display: block; color: var(--muted); }
+    .map-empty {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+      pointer-events: none;
+    }
+    .map-empty.hidden { display: none; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
     th { color: var(--muted); font-size: 12px; font-weight: 650; }
@@ -1102,6 +1369,8 @@ OPS_HTML = r"""<!doctype html>
       .chart-range button { flex: 1; }
       .chart-wrap { min-height: 250px; }
       .traffic-chart { height: 250px; }
+      .world-map { min-height: 210px; }
+      .geo-point-tooltip { left: auto; right: 0; transform: none; }
     }
   </style>
 </head>
@@ -1111,11 +1380,12 @@ OPS_HTML = r"""<!doctype html>
       <h1>估基运营管理台</h1>
       <div class="status" id="status">等待加载</div>
     </div>
-    <div class="toolbar">
-      <input id="password" type="password" autocomplete="current-password" placeholder="管理员密码">
-      <button id="save">连接</button>
-      <button class="secondary" id="refresh">刷新</button>
-    </div>
+    <form class="toolbar" id="loginForm">
+      <input id="username" name="username" type="text" autocomplete="username" placeholder="管理员账号">
+      <input id="password" name="password" type="password" autocomplete="current-password" placeholder="管理员密码">
+      <button type="submit" id="save">登录</button>
+      <button type="button" class="secondary" id="refresh">刷新</button>
+    </form>
   </header>
   <main>
     <section class="metrics">
@@ -1159,6 +1429,35 @@ OPS_HTML = r"""<!doctype html>
       </div>
     </section>
 
+    <section class="grid geo-grid">
+      <div class="panel geo-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>7 日访问地图</h2>
+            <div class="geo-map-meta" id="geoMapMeta">等待定位数据</div>
+          </div>
+        </div>
+        <div class="world-map" id="worldMap">
+          <svg viewBox="0 0 1200 600" preserveAspectRatio="none" aria-hidden="true">
+            <path class="map-grid" d="M0 100H1200 M0 200H1200 M0 300H1200 M0 400H1200 M0 500H1200 M100 0V600 M200 0V600 M300 0V600 M400 0V600 M500 0V600 M600 0V600 M700 0V600 M800 0V600 M900 0V600 M1000 0V600 M1100 0V600" />
+            <path class="map-land" d="M75 123 L140 84 L212 88 L260 117 L292 111 L337 142 L352 183 L326 205 L304 190 L278 217 L244 219 L229 255 L197 277 L177 262 L155 278 L122 263 L102 226 L82 211 L91 176 Z" />
+            <path class="map-land" d="M313 255 L350 268 L370 306 L390 337 L382 389 L365 432 L342 473 L319 454 L304 409 L286 374 L292 327 Z" />
+            <path class="map-land detail" d="M237 47 L265 23 L303 32 L324 67 L301 93 L260 84 Z" />
+            <path class="map-land" d="M474 154 L509 142 L537 159 L558 150 L581 165 L597 146 L623 160 L644 150 L675 167 L716 153 L748 171 L790 159 L829 181 L865 183 L909 210 L930 245 L911 272 L879 267 L852 289 L813 276 L782 294 L748 281 L718 300 L681 288 L648 307 L614 289 L582 301 L545 284 L509 286 L488 253 L456 238 L449 201 Z" />
+            <path class="map-land" d="M503 261 L544 276 L568 317 L559 359 L575 401 L555 458 L521 493 L484 465 L470 421 L451 391 L456 340 L479 301 Z" />
+            <path class="map-land" d="M822 358 L873 342 L925 361 L955 396 L942 434 L898 453 L852 436 L822 403 Z" />
+            <path class="map-land detail" d="M950 459 L968 468 L977 493 L961 510 L946 493 Z M1000 494 L1018 502 L1022 523 L1006 535 L993 517 Z M738 314 L746 310 L752 324 L746 337 L738 332 Z M760 322 L769 316 L778 329 L771 343 L760 339 Z M583 289 L595 293 L597 307 L585 311 L576 300 Z" />
+          </svg>
+          <div class="geo-points" id="geoPoints"></div>
+          <div class="map-empty" id="geoMapEmpty">访问发生后将在这里显示地区分布</div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>访问地区</h2>
+        <table><thead><tr><th>地区</th><th>PV</th><th>UV</th><th>IP</th></tr></thead><tbody id="topLocations"></tbody></table>
+      </div>
+    </section>
+
     <section class="grid">
       <div class="panel">
         <h2>最近访问</h2>
@@ -1173,6 +1472,7 @@ OPS_HTML = r"""<!doctype html>
   <script>
     const $ = (id) => document.getElementById(id);
     const fmt = (n) => Number(n || 0).toLocaleString('zh-CN');
+    const usernameInput = $('username');
     const passwordInput = $('password');
     let timer = null;
     let chartResizeFrame = null;
@@ -1190,8 +1490,52 @@ OPS_HTML = r"""<!doctype html>
       const el = $(id);
       el.innerHTML = rows.length ? rows.map(render).join('') : '<tr><td colspan="3" class="empty">暂无数据</td></tr>';
     }
+    function setLocationRows(rows) {
+      const el = $('topLocations');
+      el.innerHTML = rows.length ? rows.map((x) => {
+        const city = x.city && x.city !== '城市级区域' ? ` · ${x.city}` : '';
+        return `<tr><td>${escapeHtml(`${x.country || '未知地区'}${city}`)}</td><td>${fmt(x.pv)}</td><td>${fmt(x.uv)}</td><td>${fmt(x.ips)}</td></tr>`;
+      }).join('') : '<tr><td colspan="4" class="empty">暂无数据</td></tr>';
+    }
     function escapeHtml(s) {
       return String(s || '').replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+    }
+    function renderGeoMap(geo) {
+      const data = geo || {};
+      const points = Array.isArray(data.points) ? data.points : [];
+      const layer = $('geoPoints');
+      const empty = $('geoMapEmpty');
+      const totalIps = Number(data.totalIps || 0);
+      const locatedIps = Number(data.locatedIps || 0);
+      $('geoMapMeta').textContent = data.available
+        ? `已定位 ${fmt(locatedIps)} / ${fmt(totalIps)} 个独立 IP · 按城市/区域汇总`
+        : '本地 GeoIP 数据库未就绪';
+      setLocationRows(Array.isArray(data.topLocations) ? data.topLocations : points.slice(0, 10));
+
+      const validPoints = points.filter((point) => {
+        const lat = Number(point.lat);
+        const lng = Number(point.lng);
+        return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+      });
+      layer.innerHTML = validPoints.map((point) => {
+        const lat = Number(point.lat);
+        const lng = Number(point.lng);
+        const left = Math.max(1.5, Math.min(98.5, ((lng + 180) / 360) * 100));
+        const top = Math.max(2.5, Math.min(97.5, ((90 - lat) / 180) * 100));
+        const pv = Number(point.pv || 0);
+        const size = Math.max(9, Math.min(24, 8 + Math.sqrt(Math.max(1, pv)) * 2.2));
+        const city = point.city && point.city !== '城市级区域' ? ` · ${point.city}` : '';
+        const label = `${point.country || '未知地区'}${city}`;
+        return `<button type="button" class="geo-point" style="left:${left.toFixed(3)}%;top:${top.toFixed(3)}%;--size:${size.toFixed(1)}px" aria-label="${escapeHtml(`${label}: PV ${fmt(point.pv)}, UV ${fmt(point.uv)}, IP ${fmt(point.ips)}`)}"><i class="geo-point-dot"></i><span class="geo-point-tooltip"><strong>${escapeHtml(label)}</strong><span>PV ${fmt(point.pv)} · UV ${fmt(point.uv)} · ${fmt(point.ips)} IP</span></span></button>`;
+      }).join('');
+      if (validPoints.length) {
+        empty.classList.add('hidden');
+      } else {
+        empty.textContent = data.available
+          ? '地图从本次上线后开始积累，新的访问会自动出现'
+          : '本地 GeoIP 数据库未就绪';
+        empty.classList.remove('hidden');
+      }
     }
     function niceMax(value) {
       if (!Number.isFinite(value) || value <= 0) return 1;
@@ -1326,12 +1670,15 @@ OPS_HTML = r"""<!doctype html>
       renderChart();
     }
     async function load() {
+      const username = usernameInput.value.trim();
       const password = passwordInput.value;
-      if (!password) { setStatus('请输入管理员密码'); return; }
+      if (!username || !password) { setStatus('请输入管理员账号和密码'); return; }
       setStatus('加载中...');
-      const res = await fetch('/api/analytics/stats', { headers: { 'X-Admin-Password': password } });
+      const res = await fetch('/api/analytics/stats', {
+        headers: { 'X-Admin-Username': username, 'X-Admin-Password': password }
+      });
       if (!res.ok) {
-        setStatus(res.status === 401 ? '管理员密码无效' : `加载失败 ${res.status}`);
+        setStatus(res.status === 401 ? '管理员账号或密码错误' : `加载失败 ${res.status}`);
         return;
       }
       const data = await res.json();
@@ -1359,13 +1706,17 @@ OPS_HTML = r"""<!doctype html>
       }
       chartState.series = data.series || { hourly: [], daily: [] };
       renderChart();
+      renderGeoMap(data.geoWeekly);
       setRows('topPages', data.topPages || [], (x) => `<tr><td>${escapeHtml(x.path)}</td><td>${fmt(x.pv)}</td><td>${fmt(x.uv)}</td></tr>`);
       setRows('topReferrers', data.topReferrers || [], (x) => `<tr><td>${escapeHtml(x.referrer)}</td><td>${fmt(x.pv)}</td></tr>`);
       setRows('latest', data.latest || [], (x) => `<tr><td>${new Date(x.ts * 1000).toLocaleString('zh-CN')}</td><td>${escapeHtml(x.event_type)}</td><td>${escapeHtml(x.path)}</td></tr>`);
       setStatus(`已更新 ${new Date(data.generatedAt * 1000).toLocaleString('zh-CN')} · ${data.timezone}`);
       if (!timer) timer = setInterval(load, 15000);
     }
-    $('save').addEventListener('click', load);
+    $('loginForm').addEventListener('submit', (event) => {
+      event.preventDefault();
+      load();
+    });
     $('refresh').addEventListener('click', load);
     document.querySelectorAll('[data-chart-range]').forEach((button) => {
       button.addEventListener('click', () => selectChartRange(button.dataset.chartRange));
@@ -1381,7 +1732,6 @@ OPS_HTML = r"""<!doctype html>
     } else {
       window.addEventListener('resize', renderChart);
     }
-    passwordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
   </script>
 </body>
 </html>"""
@@ -1397,17 +1747,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password, Authorization, apikey")
-        self.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
+        self.send_header(
+            "Access-Control-Allow-Headers",
+            "Content-Type, X-Admin-Username, X-Admin-Password, Authorization, apikey",
+        )
         self.end_headers()
 
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
             json_response(self, {"ok": True, "service": "guji-analytics"})
-            return
-        if parsed.path == "/robots.txt":
-            text_response(self, "User-agent: *\nDisallow: /\n", content_type="text/plain; charset=utf-8")
             return
         if parsed.path in {"/", "/ops", "/ops/"}:
             text_response(self, OPS_HTML)
@@ -1432,7 +1781,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_HEAD(self):
         parsed = urlparse(self.path)
-        if parsed.path in {"/", "/ops", "/ops/", "/health", "/robots.txt", "/api/analytics/stats"}:
+        if parsed.path in {"/", "/ops", "/ops/", "/health", "/api/analytics/stats"}:
             head_response(self)
             return
         head_response(self, HTTPStatus.NOT_FOUND, "application/json; charset=utf-8")
