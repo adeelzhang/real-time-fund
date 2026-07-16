@@ -1290,7 +1290,6 @@ OPS_HTML = r"""<!doctype html>
       position: relative;
       width: 100%;
       aspect-ratio: 2 / 1;
-      min-height: 260px;
       margin-top: 14px;
       overflow: hidden;
       border: 1px solid #c8dff5;
@@ -1388,7 +1387,6 @@ OPS_HTML = r"""<!doctype html>
       .chart-range button { flex: 1; }
       .chart-wrap { min-height: 250px; }
       .traffic-chart { height: 250px; }
-      .world-map { min-height: 210px; }
       .geo-point-tooltip { left: auto; right: 0; transform: none; }
     }
   </style>
