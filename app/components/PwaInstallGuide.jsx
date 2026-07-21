@@ -26,7 +26,7 @@ import {
   detectPwaEnvironment,
   hasBlockingPwaGuideUi,
   isStandaloneMode,
-  markStandaloneSeen,
+  promptChromePwaInstall,
   recordPwaInstallDismissal,
   shouldAutoShowPwaGuide,
   updatePwaInstallState
@@ -180,6 +180,20 @@ export default function PwaInstallGuide() {
     window.location.assign(chromeIntent);
   }, []);
 
+  const handleChromeInstall = useCallback(() => {
+    sendAnalytics('pwa_chrome_native_install_clicked');
+    if (promptChromePwaInstall()) {
+      closeWithoutDismiss();
+      return;
+    }
+
+    setVisualGuideStep(0);
+    setVisualGuideDirection(1);
+    setVisualGuideOpen(true);
+    sendAnalytics('pwa_chrome_native_install_unavailable');
+    toast.info('暂时无法唤起系统添加窗口', { description: '已为你打开 Chrome 图片指引' });
+  }, [closeWithoutDismiss]);
+
   const handleVisualGuideOpen = useCallback(() => {
     setVisualGuideStep(0);
     setVisualGuideDirection(1);
@@ -233,21 +247,14 @@ export default function PwaInstallGuide() {
     setEnvironment(nextEnvironment);
 
     if (isStandaloneMode()) {
-      markStandaloneSeen();
       sendAnalytics('pwa_standalone_launch');
-      return undefined;
     }
 
     const handleAppInstalled = () => {
-      updatePwaInstallState({ suppressed: true });
       sendAnalytics('pwa_app_installed');
       closeWithoutDismiss();
     };
     const handleManualOpen = () => {
-      if (isStandaloneMode()) {
-        toast.info('当前正从桌面快捷方式打开');
-        return;
-      }
       const nextEnvironment = detectPwaEnvironment();
       if (!nextEnvironment.isMobile) {
         toast.info('请在移动设备使用', { description: '用 iOS 或 Android 设备打开本站后即可添加' });
@@ -308,12 +315,12 @@ export default function PwaInstallGuide() {
   const guideContent = {
     'android-chrome': {
       badge: 'Android · Chrome',
-      title: '创建桌面快捷方式',
-      description: '按以下步骤从 Chrome 菜单创建估基桌面快捷方式。',
+      title: '添加到主屏幕',
+      description: '添加到主屏幕，享受和 App 一样的体验。',
       steps: [
-        [MoreVertical, '点击 Chrome 右上角的“⋮”菜单'],
-        [SquarePlus, '选择“创建桌面快捷方式”'],
-        [Check, '确认创建，桌面会出现估基图标']
+        [SquarePlus, '点击下方“添加到主屏幕”'],
+        [Check, '在 Chrome 系统安装窗口中确认添加'],
+        [Smartphone, '完成后可从桌面图标直接打开估基']
       ]
     },
     'ios-safari': {
@@ -560,9 +567,9 @@ export default function PwaInstallGuide() {
 
               <div className="pwa-install-actions">
                 {variant === 'android-chrome' ? (
-                  <button type="button" className="button pwa-install-primary" onClick={handleVisualGuideOpen}>
-                    <Images aria-hidden />
-                    查看图片指引
+                  <button type="button" className="button pwa-install-primary" onClick={handleChromeInstall}>
+                    <SquarePlus aria-hidden />
+                    添加到主屏幕
                   </button>
                 ) : variant === 'android-recommend-chrome' ? (
                   <button type="button" className="button pwa-install-primary" onClick={handleOpenInChrome}>

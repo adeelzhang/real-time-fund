@@ -1,7 +1,6 @@
 export const PWA_INSTALL_OPEN_EVENT = 'guji:pwa-install-open';
 
 const INSTALL_STATE_KEY = 'guji_pwa_install_state_v3';
-const STANDALONE_SEEN_KEY = 'guji_pwa_standalone_seen_v1';
 const REMINDER_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
 
 const DEFAULT_STATE = {
@@ -124,16 +123,6 @@ export function shouldAutoShowPwaGuide(now = Date.now()) {
   return now - state.lastDismissedAt >= REMINDER_DELAY_MS;
 }
 
-export function markStandaloneSeen() {
-  if (typeof window === 'undefined') return;
-  updatePwaInstallState({ suppressed: true });
-  try {
-    window.localStorage.setItem(STANDALONE_SEEN_KEY, '1');
-  } catch {
-    // 独立模式标记失败时，不影响启动。
-  }
-}
-
 export function hasBlockingPwaGuideUi() {
   if (typeof document === 'undefined') return true;
   if (document.visibilityState !== 'visible') return true;
@@ -154,4 +143,27 @@ export function openPwaInstallGuide() {
   if (typeof window === 'undefined') return;
 
   window.dispatchEvent(new CustomEvent(PWA_INSTALL_OPEN_EVENT));
+}
+
+export function promptChromePwaInstall() {
+  if (typeof window === 'undefined') return false;
+
+  const installPrompt = window.__gujiDeferredPwaPrompt;
+  if (!installPrompt || typeof installPrompt.prompt !== 'function') return false;
+
+  try {
+    // Chrome requires prompt() to run directly in the user's click gesture.
+    installPrompt.prompt();
+    Promise.resolve(installPrompt.userChoice).finally(() => {
+      if (window.__gujiDeferredPwaPrompt === installPrompt) {
+        window.__gujiDeferredPwaPrompt = null;
+      }
+    });
+    return true;
+  } catch {
+    if (window.__gujiDeferredPwaPrompt === installPrompt) {
+      window.__gujiDeferredPwaPrompt = null;
+    }
+    return false;
+  }
 }

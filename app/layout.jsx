@@ -107,6 +107,11 @@ export default function RootLayout({ children }) {
         <link rel="icon" type="image/png" sizes="192x192" href="/guji-icon-192-v2.png" />
         <link rel="apple-touch-icon" href="/guji-icon-180-v2.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/guji-icon-180-v2.png" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{if(new URLSearchParams(location.search).get("source")==="android-install")return;window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__gujiDeferredPwaPrompt=e;});window.addEventListener("appinstalled",function(){window.__gujiDeferredPwaPrompt=null;});}catch(e){}})();`
+          }}
+        />
         {/* 尽早设置 data-theme，减少首屏主题闪烁；与 suppressHydrationWarning 配合避免服务端/客户端 html 属性不一致报错 */}
         <script
           dangerouslySetInnerHTML={{
