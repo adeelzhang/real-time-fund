@@ -1,5 +1,4 @@
 export const PWA_INSTALL_OPEN_EVENT = 'guji:pwa-install-open';
-export const PWA_INSTALL_PROMPT_READY_EVENT = 'guji:pwa-install-prompt-ready';
 
 const INSTALL_STATE_KEY = 'guji_pwa_install_state_v3';
 const STANDALONE_SEEN_KEY = 'guji_pwa_standalone_seen_v1';
@@ -155,28 +154,4 @@ export function openPwaInstallGuide() {
   if (typeof window === 'undefined') return;
 
   window.dispatchEvent(new CustomEvent(PWA_INSTALL_OPEN_EVENT));
-}
-
-export function promptChromePwaInstall() {
-  if (typeof window === 'undefined') return false;
-  const environment = detectPwaEnvironment();
-  if (!environment.isAndroid || environment.browser !== 'chrome' || isStandaloneMode()) return false;
-
-  const installPrompt = window.__gujiDeferredPwaPrompt;
-  if (!installPrompt?.prompt) return false;
-
-  try {
-    // prompt() must run synchronously inside the user's tap handler.
-    const promptResult = installPrompt.prompt();
-    Promise.resolve(promptResult)
-      .then(() => installPrompt.userChoice)
-      .then((choice) => {
-        window.__gujiDeferredPwaPrompt = null;
-        if (choice?.outcome === 'accepted') updatePwaInstallState({ suppressed: true });
-      })
-      .catch(() => undefined);
-    return true;
-  } catch {
-    return false;
-  }
 }
