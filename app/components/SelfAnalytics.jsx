@@ -5,7 +5,10 @@ import { useEffect, useRef } from 'react';
 const VISITOR_KEY = 'guji_visitor_id';
 const SESSION_KEY = 'guji_session_id';
 const SESSION_STARTED_KEY = 'guji_session_started_at';
+const ATTRIBUTION_KEY = 'guji_attribution';
 const SESSION_TTL_MS = 30 * 60 * 1000;
+const ATTRIBUTION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
 
 function makeId(prefix) {
   const random =
@@ -36,17 +39,63 @@ function getSessionId() {
   return next;
 }
 
+function cleanAttributionValue(value, maxLength = 160) {
+  return String(value || '')
+    .trim()
+    .slice(0, maxLength);
+}
+
+function getAttribution() {
+  const now = Date.now();
+  const url = new URL(window.location.href);
+  const current = Object.fromEntries(
+    UTM_KEYS.map((key) => [key, cleanAttributionValue(url.searchParams.get(key))]).filter(([, value]) => value)
+  );
+
+  if (Object.keys(current).length > 0) {
+    const next = {
+      ...current,
+      capturedAt: now,
+      landingPath: url.pathname || '/'
+    };
+    window.localStorage.setItem(ATTRIBUTION_KEY, JSON.stringify(next));
+    return next;
+  }
+
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(ATTRIBUTION_KEY) || 'null');
+    if (stored?.capturedAt && now - Number(stored.capturedAt) < ATTRIBUTION_TTL_MS) return stored;
+  } catch {
+    // Ignore malformed attribution state and continue anonymous tracking.
+  }
+  return {};
+}
+
+function getAnalyticsPath() {
+  const url = new URL(window.location.href);
+  UTM_KEYS.forEach((key) => url.searchParams.delete(key));
+  const query = url.searchParams.toString();
+  return `${url.pathname}${query ? `?${query}` : ''}`;
+}
+
 export function sendAnalytics(eventType) {
   try {
+    const attribution = getAttribution();
     const payload = {
       eventType,
       visitorId: getVisitorId(),
       sessionId: getSessionId(),
-      path: `${window.location.pathname}${window.location.search}`,
+      path: getAnalyticsPath(),
       referrer: document.referrer || '',
       title: document.title || '',
       screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
-      tz: Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+      utmSource: attribution.utm_source || '',
+      utmMedium: attribution.utm_medium || '',
+      utmCampaign: attribution.utm_campaign || '',
+      utmContent: attribution.utm_content || '',
+      utmTerm: attribution.utm_term || '',
+      attributionLandingPath: attribution.landingPath || ''
     };
     const body = JSON.stringify(payload);
     if (navigator.sendBeacon) {

@@ -137,7 +137,13 @@ def init_db():
               visitor_id TEXT NOT NULL,
               session_id TEXT NOT NULL,
               path TEXT NOT NULL,
+              landing_path TEXT,
               referrer TEXT,
+              utm_source TEXT,
+              utm_medium TEXT,
+              utm_campaign TEXT,
+              utm_content TEXT,
+              utm_term TEXT,
               title TEXT,
               user_agent TEXT,
               ip_hash TEXT,
@@ -175,6 +181,18 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_geo_cache_coordinates ON geo_cache(latitude, longitude);
             """
         )
+        event_columns = {row["name"] for row in conn.execute("PRAGMA table_info(events)").fetchall()}
+        for column in (
+            "landing_path",
+            "utm_source",
+            "utm_medium",
+            "utm_campaign",
+            "utm_content",
+            "utm_term",
+        ):
+            if column not in event_columns:
+                conn.execute(f"ALTER TABLE events ADD COLUMN {column} TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_events_utm ON events(utm_source, utm_medium, ts)")
 
 
 def ip_hash(raw_ip):
@@ -945,45 +963,78 @@ def describe_referrer(raw_referrer):
     return "外部网站", host
 
 
+def describe_event_source(referrer, utm_source, utm_medium, utm_campaign):
+    source = sanitize(utm_source, 96)
+    medium = sanitize(utm_medium, 96)
+    campaign = sanitize(utm_campaign, 160)
+    if source:
+        source_key = source.lower().replace(" ", "")
+        source_labels = {
+            "qq": "QQ",
+            "wechat": "微信",
+            "weixin": "微信",
+            "weibo": "微博",
+            "douyin": "抖音",
+            "xiaohongshu": "小红书",
+            "zhihu": "知乎",
+            "baidu": "百度搜索",
+            "google": "Google 搜索",
+            "bing": "Bing 搜索",
+        }
+        channel = source_labels.get(source_key, source)
+        detail = f"{source} / {medium}" if medium else source
+        return channel, detail, campaign
+
+    channel, detail = describe_referrer(referrer)
+    return channel, detail, ""
+
+
 def source_analytics(conn, start_ts, end_ts):
-    """Aggregate referrers without returning full URLs or query parameters."""
+    """Aggregate UTM attribution first, with referrer fallback for legacy events."""
     buckets = {}
     pv_rows = conn.execute(
         """
-        SELECT referrer, path, COUNT(*) AS pv
+        SELECT referrer, utm_source, utm_medium, utm_campaign,
+               COALESCE(NULLIF(landing_path, ''), path) AS source_path,
+               COUNT(*) AS pv
         FROM events
         WHERE event_type='pageview' AND ts>=? AND ts<?
-        GROUP BY referrer, path
+        GROUP BY referrer, utm_source, utm_medium, utm_campaign, landing_path, path
         """,
         (start_ts, end_ts),
     ).fetchall()
     uv_rows = conn.execute(
         """
-        SELECT referrer, COUNT(DISTINCT visitor_id) AS uv
+        SELECT referrer, utm_source, utm_medium, utm_campaign,
+               COUNT(DISTINCT visitor_id) AS uv
         FROM events
         WHERE event_type='pageview' AND ts>=? AND ts<?
-        GROUP BY referrer
+        GROUP BY referrer, utm_source, utm_medium, utm_campaign
         """,
         (start_ts, end_ts),
     ).fetchall()
 
     for row in pv_rows:
-        channel, detail = describe_referrer(row["referrer"])
-        key = (channel, detail)
+        channel, detail, campaign = describe_event_source(
+            row["referrer"], row["utm_source"], row["utm_medium"], row["utm_campaign"]
+        )
+        key = (channel, detail, campaign)
         bucket = buckets.setdefault(
             key,
-            {"channel": channel, "detail": detail, "pv": 0, "uv": 0, "paths": {}},
+            {"channel": channel, "detail": detail, "campaign": campaign, "pv": 0, "uv": 0, "paths": {}},
         )
-        path = sanitize(row["path"] or "/", 512)
+        path = sanitize(row["source_path"] or "/", 512)
         bucket["pv"] += int(row["pv"] or 0)
         bucket["paths"][path] = bucket["paths"].get(path, 0) + int(row["pv"] or 0)
 
     for row in uv_rows:
-        channel, detail = describe_referrer(row["referrer"])
-        key = (channel, detail)
+        channel, detail, campaign = describe_event_source(
+            row["referrer"], row["utm_source"], row["utm_medium"], row["utm_campaign"]
+        )
+        key = (channel, detail, campaign)
         bucket = buckets.setdefault(
             key,
-            {"channel": channel, "detail": detail, "pv": 0, "uv": 0, "paths": {}},
+            {"channel": channel, "detail": detail, "campaign": campaign, "pv": 0, "uv": 0, "paths": {}},
         )
         bucket["uv"] += int(row["uv"] or 0)
 
@@ -1000,6 +1051,7 @@ def source_analytics(conn, start_ts, end_ts):
             {
                 "channel": item["channel"],
                 "detail": item["detail"],
+                "campaign": item["campaign"],
                 "topPath": top_path,
                 "pv": item["pv"],
                 "uv": item["uv"],
@@ -1143,7 +1195,13 @@ def record_event(handler):
         "visitor_id": visitor_id,
         "session_id": session_id,
         "path": sanitize(payload.get("path") or "/", 512),
+        "landing_path": sanitize(payload.get("attributionLandingPath"), 512),
         "referrer": sanitize(payload.get("referrer"), 512),
+        "utm_source": sanitize(payload.get("utmSource"), 96),
+        "utm_medium": sanitize(payload.get("utmMedium"), 96),
+        "utm_campaign": sanitize(payload.get("utmCampaign"), 160),
+        "utm_content": sanitize(payload.get("utmContent"), 160),
+        "utm_term": sanitize(payload.get("utmTerm"), 160),
         "title": sanitize(payload.get("title"), 256),
         "user_agent": sanitize(handler.headers.get("User-Agent"), 512),
         "ip_hash": ip_hash(raw_ip),
@@ -1156,8 +1214,16 @@ def record_event(handler):
             cache_geoip(conn, raw_ip, row["ip_hash"], ts)
         conn.execute(
             """
-            INSERT INTO events (ts,event_type,visitor_id,session_id,path,referrer,title,user_agent,ip_hash,screen,tz)
-            VALUES (:ts,:event_type,:visitor_id,:session_id,:path,:referrer,:title,:user_agent,:ip_hash,:screen,:tz)
+            INSERT INTO events (
+              ts,event_type,visitor_id,session_id,path,landing_path,referrer,
+              utm_source,utm_medium,utm_campaign,utm_content,utm_term,
+              title,user_agent,ip_hash,screen,tz
+            )
+            VALUES (
+              :ts,:event_type,:visitor_id,:session_id,:path,:landing_path,:referrer,
+              :utm_source,:utm_medium,:utm_campaign,:utm_content,:utm_term,
+              :title,:user_agent,:ip_hash,:screen,:tz
+            )
             """,
             row,
         )
@@ -1893,12 +1959,12 @@ OPS_HTML = r"""<!doctype html>
         </div>
         <div class="source-summary"><span>PV <strong id="sourcePv">0</strong></span><span>UV <strong id="sourceUv">0</strong></span></div>
         <div class="table-scroll">
-          <table><thead><tr><th>渠道</th><th>主要来源</th><th>主要落地页</th><th>PV</th><th>UV</th><th>占比</th></tr></thead><tbody id="sourceAnalyticsRows"></tbody></table>
+          <table><thead><tr><th>渠道</th><th>来源 / 媒介</th><th>活动</th><th>主要落地页</th><th>PV</th><th>UV</th><th>占比</th></tr></thead><tbody id="sourceAnalyticsRows"></tbody></table>
         </div>
       </div>
       <div class="panel">
         <h2>来源说明</h2>
-        <div class="chart-meta" style="margin-top:8px">系统会将浏览器来源归类为搜索、社交、外部网站、站内跳转或直接访问。</div>
+        <div class="chart-meta" style="margin-top:8px">带 UTM 的推广链接会优先按来源、媒介和活动统计；历史访问继续按浏览器来源归类。</div>
         <table style="margin-top:10px"><thead><tr><th>渠道</th><th>识别规则</th></tr></thead><tbody>
           <tr><td>搜索</td><td>Google、百度、Bing 等搜索引擎</td></tr>
           <tr><td>社交</td><td>微信、微博、抖音、小红书、知乎、QQ</td></tr>
@@ -2014,7 +2080,7 @@ OPS_HTML = r"""<!doctype html>
       $('sourceMeta').textContent = `${label} · 按来源渠道统计`;
       $('sourcePv').textContent = fmt(data.pv);
       $('sourceUv').textContent = fmt(data.uv);
-      setRows('sourceAnalyticsRows', rows, (row) => `<tr><td class="source-channel">${escapeHtml(row.channel)}</td><td class="source-detail">${escapeHtml(row.detail)}</td><td class="page-path">${escapeHtml(row.topPath)}</td><td>${fmt(row.pv)}</td><td>${fmt(row.uv)}</td><td class="source-share"><span class="source-share-track"><i style="width:${Math.min(100, Number(row.share || 0))}%"></i></span>${Number(row.share || 0).toFixed(1)}%</td></tr>`, 6);
+      setRows('sourceAnalyticsRows', rows, (row) => `<tr><td class="source-channel">${escapeHtml(row.channel)}</td><td class="source-detail">${escapeHtml(row.detail)}</td><td class="source-detail">${escapeHtml(row.campaign || '-')}</td><td class="page-path">${escapeHtml(row.topPath)}</td><td>${fmt(row.pv)}</td><td>${fmt(row.uv)}</td><td class="source-share"><span class="source-share-track"><i style="width:${Math.min(100, Number(row.share || 0))}%"></i></span>${Number(row.share || 0).toFixed(1)}%</td></tr>`, 7);
     }
     function selectSourceRange(range) {
       if (!['sevenDays', 'month'].includes(range)) return;

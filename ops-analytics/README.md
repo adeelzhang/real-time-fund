@@ -39,3 +39,11 @@ docker run -d --name guji-analytics \
 ## 管理台数据
 
 管理员登录后，运营台会显示 Supabase Auth 中的邮箱注册客户，并通过“上一页 / 下一页”按页请求。页面来源分析按最近 7 天或 30 天统计 PV、UV、来源渠道、来源域名和主要落地页；来源 URL 的查询参数不会返回到管理台。
+
+推广链接可以使用标准 UTM 参数，例如：
+
+```text
+https://www.myfunds.cc/?utm_source=qq&utm_medium=social&utm_campaign=summer
+```
+
+支持 `utm_source`、`utm_medium`、`utm_campaign`、`utm_content` 和 `utm_term`。用户首次进入带 UTM 的链接后，归因信息会在本机保留 90 天，后续页面访问继续计入该渠道；新的 UTM 链接会更新归因。
