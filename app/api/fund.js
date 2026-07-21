@@ -1207,6 +1207,14 @@ export async function fetchFundValuationBySource(code, dataSource = 1) {
 
   const ds = normalizeValuationDataSource(dataSource);
 
+  // fundgz.1234567.com.cn 目前会将基金估值脚本重定向到东方财富的 404 页面。
+  // 数据源 1 的历史设置和分时缓存仍沿用原编号；实时请求先使用可用的新浪口径，
+  // 返回值会如实标记为 sina_ds2，避免把备用数据误标成天天基金数据。
+  if (ds === 1) {
+    fundDebugLog('fundgz unavailable, use sina fallback', { code: c });
+    return fetchFundValuationBySource(c, 2);
+  }
+
   // 数据源 4：Supabase gs_qdii 表
   if (ds === 4) {
     const qdii = await fetchQdiiValuationFromSupabase(c);
@@ -1347,6 +1355,34 @@ export async function fetchFundValuationBySource(code, dataSource = 1) {
   });
 }
 
+function getValuationFallbackSources(dataSource) {
+  const source = normalizeValuationDataSource(dataSource);
+  if (source === 4) return [4, 2, 3];
+  if (source === 3) return [3, 2];
+  // 数据源 1 当前内部会转到新浪数据源 2，因此无需重复请求数据源 2。
+  if (source === 1) return [1, 3];
+  return [2, 3];
+}
+
+async function fetchFundValuationWithFallback(code, dataSource) {
+  let lastError = null;
+
+  for (const source of getValuationFallbackSources(dataSource)) {
+    try {
+      return await fetchFundValuationBySource(code, source);
+    } catch (error) {
+      lastError = error;
+      fundDebugLog('fund valuation source failed', {
+        code,
+        source,
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  throw lastError || new Error('估值数据暂不可用');
+}
+
 /**
  * 获取基金申赎确认天数（SSBCFMDATA）
  * 通过天天基金移动端 API FundMNBaseInfo 获取。
@@ -1432,7 +1468,7 @@ export const fetchFundData = async (c, overrideDataSource) => {
   });
 
   // 2. 发起估值请求
-  const gzPromise = fetchFundValuationBySource(code, dataSource);
+  const gzPromise = fetchFundValuationWithFallback(code, dataSource);
 
   // 3. 编排并合并数据
   return new Promise(async (resolve, reject) => {
