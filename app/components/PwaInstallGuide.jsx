@@ -187,11 +187,19 @@ export default function PwaInstallGuide() {
       return;
     }
 
-    setVisualGuideStep(0);
-    setVisualGuideDirection(1);
-    setVisualGuideOpen(true);
-    sendAnalytics('pwa_chrome_native_install_unavailable');
-    toast.info('暂时无法唤起系统添加窗口', { description: '已为你打开 Chrome 图片指引' });
+    const targetUrl = new URL(window.location.href);
+    targetUrl.searchParams.set('pwa', '1');
+    targetUrl.searchParams.set('source', 'chrome-install');
+    targetUrl.searchParams.set('pwaAttempt', String(Date.now()));
+
+    try {
+      window.sessionStorage.setItem('guji-restore-main-tab', 'mine');
+    } catch {
+      // 恢复 Tab 失败不影响 Chrome 接管 PWA 安装流程。
+    }
+
+    sendAnalytics('pwa_chrome_native_route_opened');
+    window.location.replace(targetUrl.toString());
   }, [closeWithoutDismiss]);
 
   const handleVisualGuideOpen = useCallback(() => {
