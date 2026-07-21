@@ -24,11 +24,13 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } f
 import { sendAnalytics } from './SelfAnalytics';
 import {
   PWA_INSTALL_OPEN_EVENT,
+  PWA_INSTALL_PROMPT_READY_EVENT,
   detectPwaEnvironment,
   hasBlockingPwaGuideUi,
   isStandaloneMode,
   markStandaloneSeen,
   openPwaInstallGuide,
+  promptChromePwaInstall,
   recordPwaInstallDismissal,
   shouldAutoShowPwaGuide,
   updatePwaInstallState
@@ -98,9 +100,11 @@ function Step({ number, icon: Icon, children }) {
   );
 }
 
-function getGuideVariant(environment) {
+function getGuideVariant(environment, promptReady) {
   if (environment.isAndroid && environment.isInApp) return 'android-in-app';
-  if (environment.isAndroid && environment.browser === 'chrome') return 'android-chrome';
+  if (environment.isAndroid && environment.browser === 'chrome') {
+    return promptReady ? 'android-native' : 'android-chrome';
+  }
   if (environment.isAndroid) return 'android-recommend-chrome';
   if (environment.isIOS && environment.isSafari) return 'ios-safari';
   if (environment.isIOS && environment.isWeChat) return 'ios-wechat';
@@ -112,13 +116,14 @@ function getGuideVariant(environment) {
 export default function PwaInstallGuide() {
   const [open, setOpen] = useState(false);
   const [environment, setEnvironment] = useState(() => detectPwaEnvironment());
+  const [promptReady, setPromptReady] = useState(false);
   const [source, setSource] = useState('auto');
   const [visualGuideOpen, setVisualGuideOpen] = useState(false);
   const [visualGuideStep, setVisualGuideStep] = useState(0);
   const [visualGuideDirection, setVisualGuideDirection] = useState(1);
   const reduceMotion = useReducedMotion();
 
-  const variant = useMemo(() => getGuideVariant(environment), [environment]);
+  const variant = useMemo(() => getGuideVariant(environment, promptReady), [environment, promptReady]);
   const visualGuideItems = useMemo(() => {
     if (variant.startsWith('android')) return ANDROID_VISUAL_GUIDE;
     if (variant === 'ios-wechat') return WECHAT_IOS_VISUAL_GUIDE;
@@ -180,6 +185,15 @@ export default function PwaInstallGuide() {
 
     sendAnalytics('pwa_android_open_chrome_clicked');
     window.location.assign(chromeIntent);
+  }, []);
+
+  const handleNativeInstall = useCallback(() => {
+    if (promptChromePwaInstall()) {
+      sendAnalytics('pwa_install_cta_clicked');
+      return;
+    }
+    setPromptReady(Boolean(window.__gujiDeferredPwaPrompt?.prompt));
+    toast.info('Chrome 安装面板尚未就绪', { description: '请稍候再点“立即添加”' });
   }, []);
 
   const handleVisualGuideOpen = useCallback(() => {
@@ -245,6 +259,7 @@ export default function PwaInstallGuide() {
       sendAnalytics('pwa_app_installed');
       closeWithoutDismiss();
     };
+    const syncInstallPrompt = () => setPromptReady(Boolean(window.__gujiDeferredPwaPrompt?.prompt));
     const handleManualOpen = () => {
       if (isStandaloneMode()) {
         toast.info('当前正从桌面快捷方式打开');
@@ -255,19 +270,18 @@ export default function PwaInstallGuide() {
         toast.info('请在移动设备使用', { description: '用 iOS 或 Android 设备打开本站后即可添加' });
         return;
       }
-      if (nextEnvironment.isAndroid && nextEnvironment.browser === 'chrome') {
-        toast.info('Chrome 正在准备安装面板', { description: '请刷新页面后再点击“添加到主屏幕”' });
-        return;
-      }
       showGuide('manual');
     };
 
     window.addEventListener('appinstalled', handleAppInstalled);
     window.addEventListener(PWA_INSTALL_OPEN_EVENT, handleManualOpen);
+    window.addEventListener(PWA_INSTALL_PROMPT_READY_EVENT, syncInstallPrompt);
+    syncInstallPrompt();
 
     return () => {
       window.removeEventListener('appinstalled', handleAppInstalled);
       window.removeEventListener(PWA_INSTALL_OPEN_EVENT, handleManualOpen);
+      window.removeEventListener(PWA_INSTALL_PROMPT_READY_EVENT, syncInstallPrompt);
     };
   }, [closeWithoutDismiss, showGuide]);
 
@@ -312,11 +326,17 @@ export default function PwaInstallGuide() {
   }, [open, visualGuideOpen]);
 
   const guideContent = {
+    'android-native': {
+      badge: 'Android · Chrome',
+      title: '一键添加到主屏幕',
+      description: '点击“立即添加”后，Chrome 会打开系统安装面板。',
+      steps: [[Check, '在系统提示中确认添加，估基图标将出现在桌面']]
+    },
     'android-chrome': {
       badge: 'Android · Chrome',
-      title: '打开系统安装面板',
-      description: '将使用 Chrome 原生安装面板创建估基桌面图标。',
-      steps: [[Download, '打开后按系统提示确认添加']]
+      title: '正在准备安装面板',
+      description: 'Chrome 就绪后会自动切换为“立即添加”。',
+      steps: [[Download, '请稍候，或点击下方按钮重新检测']]
     },
     'ios-safari': {
       badge: 'iOS · Safari',
@@ -563,10 +583,15 @@ export default function PwaInstallGuide() {
               ) : null}
 
               <div className="pwa-install-actions">
-                {variant === 'android-chrome' ? (
-                  <button type="button" className="button pwa-install-primary" onClick={openPwaInstallGuide}>
+                {variant === 'android-native' ? (
+                  <button type="button" className="button pwa-install-primary" onClick={handleNativeInstall}>
                     <Download aria-hidden />
-                    打开安装面板
+                    立即添加
+                  </button>
+                ) : variant === 'android-chrome' ? (
+                  <button type="button" className="button pwa-install-primary" onClick={handleNativeInstall}>
+                    <Download aria-hidden />
+                    重新检测
                   </button>
                 ) : variant === 'android-recommend-chrome' ? (
                   <button type="button" className="button pwa-install-primary" onClick={handleOpenInChrome}>

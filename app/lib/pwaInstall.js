@@ -154,26 +154,29 @@ export function hasBlockingPwaGuideUi() {
 export function openPwaInstallGuide() {
   if (typeof window === 'undefined') return;
 
-  const environment = detectPwaEnvironment();
-  if (environment.isAndroid && environment.browser === 'chrome' && !isStandaloneMode()) {
-    const installPrompt = window.__gujiDeferredPwaPrompt;
-    if (installPrompt?.prompt) {
-      try {
-        // prompt() must run synchronously inside the user's tap handler.
-        const promptResult = installPrompt.prompt();
-        Promise.resolve(promptResult)
-          .then(() => installPrompt.userChoice)
-          .then((choice) => {
-            window.__gujiDeferredPwaPrompt = null;
-            if (choice?.outcome === 'accepted') updatePwaInstallState({ suppressed: true });
-          })
-          .catch(() => undefined);
-        return;
-      } catch {
-        // Fall through to the normal guide only when Chrome refuses the panel.
-      }
-    }
-  }
-
   window.dispatchEvent(new CustomEvent(PWA_INSTALL_OPEN_EVENT));
+}
+
+export function promptChromePwaInstall() {
+  if (typeof window === 'undefined') return false;
+  const environment = detectPwaEnvironment();
+  if (!environment.isAndroid || environment.browser !== 'chrome' || isStandaloneMode()) return false;
+
+  const installPrompt = window.__gujiDeferredPwaPrompt;
+  if (!installPrompt?.prompt) return false;
+
+  try {
+    // prompt() must run synchronously inside the user's tap handler.
+    const promptResult = installPrompt.prompt();
+    Promise.resolve(promptResult)
+      .then(() => installPrompt.userChoice)
+      .then((choice) => {
+        window.__gujiDeferredPwaPrompt = null;
+        if (choice?.outcome === 'accepted') updatePwaInstallState({ suppressed: true });
+      })
+      .catch(() => undefined);
+    return true;
+  } catch {
+    return false;
+  }
 }
