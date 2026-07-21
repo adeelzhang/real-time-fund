@@ -882,21 +882,13 @@ def record_event(handler):
         return
 
     event_type = sanitize(payload.get("eventType") or "pageview", 32)
+    if event_type.startswith("pwa_"):
+        json_response(handler, {"ok": True, "ignored": True})
+        return
+
     if event_type not in {
         "pageview",
         "heartbeat",
-        "pwa_guide_shown",
-        "pwa_guide_dismissed",
-        "pwa_guide_suppressed",
-        "pwa_install_cta_clicked",
-        "pwa_prompt_accepted",
-        "pwa_prompt_dismissed",
-        "pwa_app_installed",
-        "pwa_standalone_launch",
-        "pwa_marked_installed",
-        "pwa_copy_url_clicked",
-        "pwa_ios_visual_guide_opened",
-        "pwa_ios_visual_guide_done",
     }:
         event_type = "pageview"
 

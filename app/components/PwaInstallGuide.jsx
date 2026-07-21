@@ -20,12 +20,10 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
-import { sendAnalytics } from './SelfAnalytics';
 import {
   PWA_INSTALL_OPEN_EVENT,
   detectPwaEnvironment,
   hasBlockingPwaGuideUi,
-  isStandaloneMode,
   promptChromePwaInstall,
   recordPwaInstallDismissal,
   shouldAutoShowPwaGuide,
@@ -135,31 +133,26 @@ export default function PwaInstallGuide() {
     setVisualGuideStep(0);
     setVisualGuideDirection(1);
     setOpen(true);
-    sendAnalytics('pwa_guide_shown');
   }, []);
 
   const handleLater = useCallback(() => {
     recordPwaInstallDismissal();
-    sendAnalytics('pwa_guide_dismissed');
     closeWithoutDismiss();
   }, [closeWithoutDismiss]);
 
   const handleNeverRemind = useCallback(() => {
     updatePwaInstallState({ suppressed: true });
-    sendAnalytics('pwa_guide_suppressed');
     closeWithoutDismiss();
     toast.success('已关闭自动提醒', { description: '仍可在“我的”中随时查看添加方法' });
   }, [closeWithoutDismiss]);
 
   const handleManualComplete = useCallback(() => {
     updatePwaInstallState({ suppressed: true });
-    sendAnalytics('pwa_manual_guide_completed');
     closeWithoutDismiss();
     toast.success('已关闭提醒', { description: '添加完成后可从桌面图标打开' });
   }, [closeWithoutDismiss]);
 
   const handleCopyUrl = useCallback(async () => {
-    sendAnalytics('pwa_copy_url_clicked');
     const mainUrl = `${window.location.origin}/`;
     try {
       await window.navigator.clipboard.writeText(mainUrl);
@@ -176,12 +169,10 @@ export default function PwaInstallGuide() {
     const intentTarget = `${targetUrl.host}${targetUrl.pathname}${targetUrl.search}`;
     const chromeIntent = `intent://${intentTarget}#Intent;scheme=${scheme};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(targetUrl.toString())};end`;
 
-    sendAnalytics('pwa_android_open_chrome_clicked');
     window.location.assign(chromeIntent);
   }, []);
 
   const handleChromeInstall = useCallback(() => {
-    sendAnalytics('pwa_chrome_native_install_clicked');
     if (promptChromePwaInstall()) {
       closeWithoutDismiss();
       return;
@@ -190,7 +181,6 @@ export default function PwaInstallGuide() {
     setVisualGuideStep(0);
     setVisualGuideDirection(1);
     setVisualGuideOpen(true);
-    sendAnalytics('pwa_chrome_native_install_unavailable');
     toast.info('暂时无法唤起系统添加窗口', { description: '已为你打开 Chrome 图片指引' });
   }, [closeWithoutDismiss]);
 
@@ -198,14 +188,12 @@ export default function PwaInstallGuide() {
     setVisualGuideStep(0);
     setVisualGuideDirection(1);
     setVisualGuideOpen(true);
-    sendAnalytics('pwa_ios_visual_guide_opened');
   }, []);
 
   const handleVisualGuideComplete = useCallback(() => {
     setVisualGuideOpen(false);
     setVisualGuideStep(0);
     setVisualGuideDirection(1);
-    sendAnalytics('pwa_ios_visual_guide_done');
   }, []);
 
   const goToVisualGuideStep = useCallback(
@@ -246,12 +234,7 @@ export default function PwaInstallGuide() {
     const nextEnvironment = detectPwaEnvironment();
     setEnvironment(nextEnvironment);
 
-    if (isStandaloneMode()) {
-      sendAnalytics('pwa_standalone_launch');
-    }
-
     const handleAppInstalled = () => {
-      sendAnalytics('pwa_app_installed');
       closeWithoutDismiss();
     };
     const handleManualOpen = () => {
