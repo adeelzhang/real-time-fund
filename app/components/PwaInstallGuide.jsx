@@ -99,8 +99,8 @@ function Step({ number, icon: Icon, children }) {
 
 function getGuideVariant(environment, promptReady) {
   if (environment.isAndroid && environment.isInApp) return 'android-in-app';
+  if (environment.isAndroid && environment.browser !== 'chrome') return 'android-recommend-chrome';
   if (environment.isAndroid && promptReady && !environment.isInApp) return 'android-native';
-  if (environment.isAndroid && environment.isVivoBrowser) return 'android-vivo';
   if (environment.isIOS && environment.isSafari) return 'ios-safari';
   if (environment.isIOS && environment.isWeChat) return 'ios-wechat';
   if (environment.isInApp) return 'in-app';
@@ -175,12 +175,12 @@ export default function PwaInstallGuide() {
 
   const handleOpenInChrome = useCallback(() => {
     const targetUrl = new URL('/', window.location.origin);
-    targetUrl.searchParams.set('source', 'vivo-install');
+    targetUrl.searchParams.set('source', 'android-install');
     const scheme = targetUrl.protocol.replace(':', '');
     const intentTarget = `${targetUrl.host}${targetUrl.pathname}${targetUrl.search}`;
     const chromeIntent = `intent://${intentTarget}#Intent;scheme=${scheme};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(targetUrl.toString())};end`;
 
-    sendAnalytics('pwa_vivo_open_chrome_clicked');
+    sendAnalytics('pwa_android_open_chrome_clicked');
     window.location.assign(chromeIntent);
   }, []);
 
@@ -416,11 +416,11 @@ export default function PwaInstallGuide() {
         [SquarePlus, '按图片指引添加到主屏幕']
       ]
     },
-    'android-vivo': {
-      badge: 'vivo 浏览器',
+    'android-recommend-chrome': {
+      badge: 'Android · 当前浏览器',
       title: '用 Chrome 一键添加',
-      description: 'vivo 浏览器不提供网页直调安装，打开 Chrome 后可直接唤起系统安装面板。',
-      steps: [[ExternalLink, '点击下方按钮，在 Chrome 中继续安装']]
+      description: 'Chrome 支持直接唤起系统安装面板，可将估基添加到桌面启动。',
+      steps: [[ExternalLink, '点击下方按钮，在 Chrome 中继续添加']]
     }
   }[variant];
 
@@ -434,7 +434,7 @@ export default function PwaInstallGuide() {
       ? '查看微信系统浏览器图示'
       : variant === 'android-native'
         ? '没有弹出安装面板？查看图片指引'
-        : variant === 'android-vivo'
+        : variant === 'android-recommend-chrome'
           ? '查看 Chrome 安装图示'
           : '查看图片指引';
   const visualEntryDescription =
@@ -612,9 +612,10 @@ export default function PwaInstallGuide() {
                     <Download aria-hidden />
                     {installing ? '正在打开…' : '立即添加'}
                   </button>
-                ) : variant === 'android-vivo' ? (
+                ) : variant === 'android-recommend-chrome' ? (
                   <button type="button" className="button pwa-install-primary" onClick={handleOpenInChrome}>
-                    <ExternalLink aria-hidden />用 Chrome 一键添加
+                    <ExternalLink aria-hidden />
+                    使用 Chrome 打开
                   </button>
                 ) : needsBrowserTransfer ? (
                   <button type="button" className="button pwa-install-primary" onClick={handleCopyUrl}>
@@ -629,7 +630,7 @@ export default function PwaInstallGuide() {
                 )}
 
                 <button type="button" className="button secondary pwa-install-secondary" onClick={handleLater}>
-                  稍后
+                  {variant === 'android-recommend-chrome' ? '继续网页使用' : '稍后'}
                 </button>
               </div>
 
