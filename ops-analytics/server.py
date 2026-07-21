@@ -789,6 +789,72 @@ def weekly_geo_summary(conn, start_ts):
     }
 
 
+def page_analytics(conn, start_ts, end_ts, today_start, today_end, tz):
+    today_rows = conn.execute(
+        """
+        SELECT path, COUNT(*) AS pv, COUNT(DISTINCT visitor_id) AS uv
+        FROM events
+        WHERE event_type='pageview' AND ts>=? AND ts<?
+        GROUP BY path
+        ORDER BY pv DESC, path ASC
+        """,
+        (today_start, today_end),
+    ).fetchall()
+
+    trend_rows = conn.execute(
+        """
+        SELECT path, date(ts, 'unixepoch', '+8 hours') AS day,
+               COUNT(*) AS pv, COUNT(DISTINCT visitor_id) AS uv
+        FROM events
+        WHERE event_type='pageview' AND ts>=? AND ts<?
+        GROUP BY path, day
+        ORDER BY day ASC, pv DESC, path ASC
+        """,
+        (start_ts, end_ts),
+    ).fetchall()
+
+    page_paths = []
+    seen_paths = set()
+    for row in today_rows:
+        path = row["path"]
+        if path not in seen_paths:
+            page_paths.append(path)
+            seen_paths.add(path)
+    for row in trend_rows:
+        path = row["path"]
+        if path not in seen_paths:
+            page_paths.append(path)
+            seen_paths.add(path)
+
+    trend_by_day = {}
+    for row in trend_rows:
+        trend_by_day.setdefault(row["day"], {})[row["path"]] = {
+            "pv": int(row["pv"]),
+            "uv": int(row["uv"]),
+        }
+
+    series = []
+    first_day = datetime.fromtimestamp(start_ts, tz)
+    for index in range(30):
+        day = first_day + timedelta(days=index)
+        day_key = day.strftime("%Y-%m-%d")
+        series.append(
+            {
+                "date": day_key,
+                "label": day.strftime("%m-%d"),
+                "pages": trend_by_day.get(day_key, {}),
+            }
+        )
+
+    return {
+        "today": [dict(row) for row in today_rows],
+        "trend": {
+            "pages": page_paths,
+            "series": series,
+        },
+    }
+
+
 def build_stats():
     tz = get_tz()
     now = datetime.now(tz)
@@ -796,10 +862,19 @@ def build_stats():
     today_start = to_ts(local_midnight(now))
     seven_start = to_ts(now - timedelta(days=7))
     month_start = to_ts(local_midnight(now.replace(day=1)))
+    page_trend_start = to_ts(local_midnight(now) - timedelta(days=29))
     five_min = end - 5 * 60
     thirty_min = end - 30 * 60
 
     with get_db() as conn:
+        page_stats = page_analytics(
+            conn,
+            page_trend_start,
+            end + 1,
+            today_start,
+            end + 1,
+            tz,
+        )
         top_pages = [
             dict(row)
             for row in conn.execute(
@@ -864,6 +939,8 @@ def build_stats():
             },
             "geoWeekly": weekly_geo_summary(conn, seven_start),
             "topPages": top_pages,
+            "pageToday": page_stats["today"],
+            "pageTrend": page_stats["trend"],
             "topReferrers": top_referrers,
             "latest": latest,
         }
@@ -1166,6 +1243,7 @@ OPS_HTML = r"""<!doctype html>
       background: var(--bg);
       color: var(--text);
     }
+    body.modal-open { overflow: hidden; }
     header {
       position: sticky;
       top: 0;
@@ -1195,6 +1273,46 @@ OPS_HTML = r"""<!doctype html>
     button { cursor: pointer; background: var(--text); color: #fff; font-weight: 650; }
     button.secondary { background: #fff; color: var(--text); }
     .status { color: var(--muted); font-size: 13px; }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
+    .modal[hidden] { display: none; }
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+    .modal-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, .38); }
+    .modal-dialog {
+      position: relative;
+      width: min(420px, 100%);
+      padding: 24px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      box-shadow: 0 24px 70px rgba(15, 23, 42, .24);
+    }
+    .modal-dialog h2 { margin: 0; font-size: 18px; }
+    .modal-dialog p { margin: 6px 0 18px; color: var(--muted); font-size: 13px; }
+    .modal-close {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 22px;
+      line-height: 1;
+    }
+    .modal-close:hover { background: #f1f5f9; color: var(--text); }
+    .modal-form { display: grid; gap: 12px; }
+    .modal-form input { width: 100%; min-width: 0; }
+    .modal-form button[type="submit"] { width: 100%; }
+    .login-error { min-height: 20px; color: var(--rose); font-size: 13px; }
     .metrics {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -1357,6 +1475,23 @@ OPS_HTML = r"""<!doctype html>
       pointer-events: none;
     }
     .map-empty.hidden { display: none; }
+    .page-analytics-grid { grid-template-columns: minmax(280px, 1fr) minmax(0, 1.35fr); }
+    .table-scroll { max-height: 390px; overflow: auto; }
+    .table-scroll thead { position: sticky; top: 0; z-index: 1; background: var(--panel); }
+    .page-path { max-width: 360px; word-break: break-all; }
+    .page-selector { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+    select {
+      max-width: min(280px, 52vw);
+      height: 34px;
+      padding: 0 28px 0 9px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+    }
+    .page-chart-wrap { min-height: 280px; }
+    .page-chart { height: 280px; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
     th { color: var(--muted); font-size: 12px; font-weight: 650; }
@@ -1379,6 +1514,10 @@ OPS_HTML = r"""<!doctype html>
       .chart-range button { flex: 1; }
       .chart-wrap { min-height: 250px; }
       .traffic-chart { height: 250px; }
+      .page-chart-wrap { min-height: 250px; }
+      .page-chart { height: 250px; }
+      .page-selector { align-items: stretch; flex-direction: column; }
+      select { max-width: none; width: 100%; }
       .geo-point-tooltip { left: auto; right: 0; transform: none; }
     }
   </style>
@@ -1389,13 +1528,25 @@ OPS_HTML = r"""<!doctype html>
       <h1>估基运营管理台</h1>
       <div class="status" id="status">等待加载</div>
     </div>
-    <form class="toolbar" id="loginForm">
-      <input id="username" name="username" type="text" autocomplete="username" placeholder="管理员账号">
-      <input id="password" name="password" type="password" autocomplete="current-password" placeholder="管理员密码">
-      <button type="submit" id="save">登录</button>
+    <div class="header-actions">
+      <button type="button" id="openLogin">管理员登录</button>
       <button type="button" class="secondary" id="refresh">刷新</button>
-    </form>
+    </div>
   </header>
+  <div class="modal" id="loginModal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+    <div class="modal-backdrop" id="loginBackdrop"></div>
+    <div class="modal-dialog">
+      <button type="button" class="modal-close" id="closeLogin" aria-label="关闭登录窗口">&times;</button>
+      <h2 id="loginTitle">管理员登录</h2>
+      <p>登录后查看页面访问、PV/UV 趋势和其他运营数据。</p>
+      <form class="modal-form" id="loginForm">
+        <input id="username" name="username" type="text" autocomplete="username" placeholder="管理员账号" required>
+        <input id="password" name="password" type="password" autocomplete="current-password" placeholder="管理员密码" required>
+        <div class="login-error" id="loginError" role="alert"></div>
+        <button type="submit" id="save">登录并查看数据</button>
+      </form>
+    </div>
+  </div>
   <main>
     <section class="metrics">
       <div class="metric"><div class="label">当前客户量</div><div class="value blue" id="active">0</div><div class="sub">最近 5 分钟活跃 UV</div></div>
@@ -1435,6 +1586,43 @@ OPS_HTML = r"""<!doctype html>
       <div class="panel">
         <h2>Top 页面</h2>
         <table><thead><tr><th>页面</th><th>PV</th><th>UV</th></tr></thead><tbody id="topPages"></tbody></table>
+      </div>
+    </section>
+
+    <section class="grid page-analytics-grid">
+      <div class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>页面访问</h2>
+            <div class="chart-meta" id="pageTodayMeta">今日各页面 PV / UV</div>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table><thead><tr><th>页面</th><th>PV</th><th>UV</th></tr></thead><tbody id="pageToday"></tbody></table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>页面访问趋势</h2>
+            <div class="chart-meta" id="pageChartMeta">最近 30 天 · 请选择页面</div>
+          </div>
+          <label class="page-selector">页面
+            <select id="pageTrendSelect" aria-label="选择页面"></select>
+          </label>
+        </div>
+        <div class="chart-legend" aria-hidden="true">
+          <span><i class="chart-dot"></i>PV 访问量</span>
+          <span><i class="chart-dot uv"></i>UV 访客量</span>
+        </div>
+        <div class="chart-wrap page-chart-wrap" id="pageChartWrap">
+          <svg class="traffic-chart page-chart" id="pageChart" role="img" aria-label="页面 PV 和 UV 访问趋势"></svg>
+          <div class="chart-tooltip" id="pageChartTooltip">
+            <strong id="pageChartTooltipLabel"></strong>
+            <span class="pv-value" id="pageChartTooltipPv"></span>
+            <span class="uv-value" id="pageChartTooltipUv"></span>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -1489,8 +1677,22 @@ OPS_HTML = r"""<!doctype html>
       height: 0,
       points: { pv: [], uv: [] }
     };
+    const pageChartState = {
+      selected: '',
+      trend: { pages: [], series: [] },
+      rows: [],
+      width: 0,
+      height: 0,
+      points: { pv: [], uv: [] }
+    };
 
     function setStatus(text) { $('status').textContent = text; }
+    function setLoginModal(open) {
+      $('loginModal').hidden = !open;
+      document.body.classList.toggle('modal-open', open);
+      if (open) window.setTimeout(() => usernameInput.focus(), 0);
+    }
+    function setLoginError(text) { $('loginError').textContent = text || ''; }
     function setRows(id, rows, render) {
       const el = $(id);
       el.innerHTML = rows.length ? rows.map(render).join('') : '<tr><td colspan="3" class="empty">暂无数据</td></tr>';
@@ -1668,6 +1870,124 @@ OPS_HTML = r"""<!doctype html>
         <circle class="chart-focus-dot uv" id="chartFocusUv" r="5"></circle>
       `;
     }
+    function renderPageChart() {
+      const wrap = $('pageChartWrap');
+      const svg = $('pageChart');
+      const rows = pageChartState.rows;
+      const width = Math.max(300, Math.round(wrap.clientWidth || 600));
+      const height = width < 560 ? 250 : 280;
+      const padding = { top: 18, right: 16, bottom: 34, left: 44 };
+      const plotWidth = width - padding.left - padding.right;
+      const plotHeight = height - padding.top - padding.bottom;
+      const selected = pageChartState.selected;
+      const values = rows.map((row) => row.pages?.[selected] || { pv: 0, uv: 0 });
+
+      pageChartState.width = width;
+      pageChartState.height = height;
+      svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      if (!rows.length || !selected) {
+        pageChartState.points = { pv: [], uv: [] };
+        svg.innerHTML = '<text class="chart-empty" x="50%" y="50%">暂无页面趋势数据</text>';
+        return;
+      }
+
+      const maxValue = niceMax(Math.max(...values.flatMap((row) => [Number(row.pv || 0), Number(row.uv || 0)])));
+      const xAt = (index) => padding.left + (rows.length === 1 ? plotWidth / 2 : (index / (rows.length - 1)) * plotWidth);
+      const yAt = (value) => padding.top + plotHeight - (Number(value || 0) / maxValue) * plotHeight;
+      const pvPoints = values.map((row, index) => ({ x: xAt(index), y: yAt(row.pv) }));
+      const uvPoints = values.map((row, index) => ({ x: xAt(index), y: yAt(row.uv) }));
+      pageChartState.points = { pv: pvPoints, uv: uvPoints };
+
+      const gridLines = [];
+      for (let index = 0; index <= 4; index += 1) {
+        const value = (maxValue * index) / 4;
+        const y = yAt(value);
+        gridLines.push(`<line class="chart-grid-line" x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}"></line>`);
+        gridLines.push(`<text class="chart-axis-label" x="${padding.left - 8}" y="${y + 4}" text-anchor="end">${escapeHtml(fmt(value))}</text>`);
+      }
+      const labelEvery = rows.length > 24 ? 5 : rows.length > 12 ? 4 : 1;
+      const xLabels = rows.map((row, index) => {
+        if (index !== 0 && index !== rows.length - 1 && index % labelEvery !== 0) return '';
+        return `<text class="chart-axis-label" x="${xAt(index)}" y="${height - 9}" text-anchor="middle">${escapeHtml(row.label)}</text>`;
+      }).join('');
+      const description = rows.map((row, index) => `${row.date || row.label} PV ${fmt(values[index].pv)} UV ${fmt(values[index].uv)}`).join('；');
+      svg.innerHTML = `
+        <title>${escapeHtml(`${selected} 最近 30 天 PV 和 UV 访问趋势`)}</title>
+        <desc>${escapeHtml(description)}</desc>
+        ${gridLines.join('')}
+        ${xLabels}
+        <path class="chart-line pv" d="${smoothPath(pvPoints)}"></path>
+        <path class="chart-line uv" d="${smoothPath(uvPoints)}"></path>
+        <line class="chart-crosshair" id="pageChartCrosshair" y1="${padding.top}" y2="${padding.top + plotHeight}"></line>
+        <circle class="chart-focus-dot pv" id="pageChartFocusPv" r="5"></circle>
+        <circle class="chart-focus-dot uv" id="pageChartFocusUv" r="5"></circle>
+      `;
+    }
+    function showPageChartTooltip(event) {
+      const rows = pageChartState.rows;
+      if (!rows.length || !pageChartState.selected) return;
+      const svg = $('pageChart');
+      const rect = svg.getBoundingClientRect();
+      const viewX = ((event.clientX - rect.left) / rect.width) * pageChartState.width;
+      const left = 44;
+      const right = 16;
+      const plotWidth = pageChartState.width - left - right;
+      const index = Math.max(0, Math.min(rows.length - 1, Math.round(((viewX - left) / plotWidth) * (rows.length - 1))));
+      const row = rows[index];
+      const values = row.pages?.[pageChartState.selected] || { pv: 0, uv: 0 };
+      const pvPoint = pageChartState.points.pv[index];
+      const uvPoint = pageChartState.points.uv[index];
+      const crosshair = $('pageChartCrosshair');
+      const pvDot = $('pageChartFocusPv');
+      const uvDot = $('pageChartFocusUv');
+      crosshair.setAttribute('x1', pvPoint.x);
+      crosshair.setAttribute('x2', pvPoint.x);
+      crosshair.style.opacity = '1';
+      pvDot.setAttribute('cx', pvPoint.x);
+      pvDot.setAttribute('cy', pvPoint.y);
+      pvDot.style.opacity = '1';
+      uvDot.setAttribute('cx', uvPoint.x);
+      uvDot.setAttribute('cy', uvPoint.y);
+      uvDot.style.opacity = '1';
+      $('pageChartTooltipLabel').textContent = row.date || row.label;
+      $('pageChartTooltipPv').textContent = `PV ${fmt(values.pv)}`;
+      $('pageChartTooltipUv').textContent = `UV ${fmt(values.uv)}`;
+      const tooltip = $('pageChartTooltip');
+      const pointLeft = (pvPoint.x / pageChartState.width) * rect.width;
+      const pointTop = (Math.min(pvPoint.y, uvPoint.y) / pageChartState.height) * rect.height;
+      tooltip.style.left = `${Math.max(76, Math.min(rect.width - 76, pointLeft))}px`;
+      tooltip.style.top = `${Math.max(58, pointTop - 8)}px`;
+      tooltip.classList.add('visible');
+    }
+    function hidePageChartTooltip() {
+      $('pageChartTooltip').classList.remove('visible');
+      ['pageChartCrosshair', 'pageChartFocusPv', 'pageChartFocusUv'].forEach((id) => {
+        const element = $(id);
+        if (element) element.style.opacity = '0';
+      });
+    }
+    function renderPageAnalytics(pageToday, pageTrend) {
+      const todayRows = Array.isArray(pageToday) ? pageToday : [];
+      const trend = pageTrend && typeof pageTrend === 'object' ? pageTrend : {};
+      const pages = Array.isArray(trend.pages) ? trend.pages : [];
+      const series = Array.isArray(trend.series) ? trend.series : [];
+      setRows('pageToday', todayRows, (row) => `<tr><td class="page-path">${escapeHtml(row.path)}</td><td>${fmt(row.pv)}</td><td>${fmt(row.uv)}</td></tr>`);
+      $('pageTodayMeta').textContent = todayRows.length ? `今日 ${fmt(todayRows.length)} 个页面有访问记录` : '今日各页面 PV / UV';
+
+      const select = $('pageTrendSelect');
+      const current = pages.includes(pageChartState.selected) ? pageChartState.selected : (pages[0] || '');
+      select.innerHTML = pages.length
+        ? pages.map((path) => `<option value="${escapeHtml(path)}">${escapeHtml(path)}</option>`).join('')
+        : '<option value="">暂无页面</option>';
+      select.value = current;
+      select.disabled = !pages.length;
+      pageChartState.selected = current;
+      pageChartState.trend = { pages, series };
+      pageChartState.rows = series;
+      $('pageChartMeta').textContent = current ? `最近 30 天 · ${current}` : '最近 30 天 · 请选择页面';
+      hidePageChartTooltip();
+      renderPageChart();
+    }
     function hideChartTooltip() {
       $('chartTooltip').classList.remove('visible');
       const crosshair = $('chartCrosshair');
@@ -1729,16 +2049,34 @@ OPS_HTML = r"""<!doctype html>
     async function load() {
       const username = usernameInput.value.trim();
       const password = passwordInput.value;
-      if (!username || !password) { setStatus('请输入管理员账号和密码'); return; }
+      if (!username || !password) {
+        setStatus('请输入管理员账号和密码');
+        setLoginError('请输入管理员账号和密码');
+        setLoginModal(true);
+        return;
+      }
+      setLoginError('');
       setStatus('加载中...');
-      const res = await fetch('/api/analytics/stats', {
-        headers: { 'X-Admin-Username': username, 'X-Admin-Password': password }
-      });
+      let res;
+      try {
+        res = await fetch('/api/analytics/stats', {
+          headers: { 'X-Admin-Username': username, 'X-Admin-Password': password }
+        });
+      } catch (error) {
+        setStatus('加载失败，请检查网络连接');
+        setLoginError('暂时无法连接运营服务');
+        setLoginModal(true);
+        return;
+      }
       if (!res.ok) {
-        setStatus(res.status === 401 ? '管理员账号或密码错误' : `加载失败 ${res.status}`);
+        const message = res.status === 401 ? '管理员账号或密码错误' : `加载失败 ${res.status}`;
+        setStatus(message);
+        setLoginError(message);
+        setLoginModal(true);
         return;
       }
       const data = await res.json();
+      setLoginModal(false);
       $('active').textContent = fmt(data.realtime.activeVisitors5m);
       $('todayPv').textContent = fmt(data.today.pv);
       $('todayUv').textContent = fmt(data.today.uv);
@@ -1764,6 +2102,7 @@ OPS_HTML = r"""<!doctype html>
       chartState.series = data.series || { hourly: [], daily: [] };
       renderChart();
       renderGeoMap(data.geoWeekly);
+      renderPageAnalytics(data.pageToday, data.pageTrend);
       setRows('topPages', data.topPages || [], (x) => `<tr><td>${escapeHtml(x.path)}</td><td>${fmt(x.pv)}</td><td>${fmt(x.uv)}</td></tr>`);
       setRows('topReferrers', data.topReferrers || [], (x) => `<tr><td>${escapeHtml(x.referrer)}</td><td>${fmt(x.pv)}</td></tr>`);
       setRows('latest', data.latest || [], (x) => `<tr><td>${new Date(x.ts * 1000).toLocaleString('zh-CN')}</td><td>${escapeHtml(x.event_type)}</td><td>${escapeHtml(x.path)}</td></tr>`);
@@ -1774,21 +2113,44 @@ OPS_HTML = r"""<!doctype html>
       event.preventDefault();
       load();
     });
+    $('openLogin').addEventListener('click', () => setLoginModal(true));
+    $('closeLogin').addEventListener('click', () => setLoginModal(false));
+    $('loginBackdrop').addEventListener('click', () => setLoginModal(false));
     $('refresh').addEventListener('click', load);
+    $('pageTrendSelect').addEventListener('change', (event) => {
+      pageChartState.selected = event.target.value;
+      $('pageChartMeta').textContent = pageChartState.selected
+        ? `最近 30 天 · ${pageChartState.selected}`
+        : '最近 30 天 · 请选择页面';
+      hidePageChartTooltip();
+      renderPageChart();
+    });
     document.querySelectorAll('[data-chart-range]').forEach((button) => {
       button.addEventListener('click', () => selectChartRange(button.dataset.chartRange));
     });
     $('trafficChart').addEventListener('pointermove', showChartTooltip);
     $('trafficChart').addEventListener('pointerleave', hideChartTooltip);
     $('trafficChart').addEventListener('pointercancel', hideChartTooltip);
+    $('pageChart').addEventListener('pointermove', showPageChartTooltip);
+    $('pageChart').addEventListener('pointerleave', hidePageChartTooltip);
+    $('pageChart').addEventListener('pointercancel', hidePageChartTooltip);
     if ('ResizeObserver' in window) {
-      new ResizeObserver(() => {
+      const chartResizeObserver = new ResizeObserver(() => {
         window.cancelAnimationFrame(chartResizeFrame);
-        chartResizeFrame = window.requestAnimationFrame(renderChart);
-      }).observe($('trafficChartWrap'));
+        chartResizeFrame = window.requestAnimationFrame(() => {
+          renderChart();
+          renderPageChart();
+        });
+      });
+      chartResizeObserver.observe($('trafficChartWrap'));
+      chartResizeObserver.observe($('pageChartWrap'));
     } else {
-      window.addEventListener('resize', renderChart);
+      window.addEventListener('resize', () => {
+        renderChart();
+        renderPageChart();
+      });
     }
+    setLoginModal(true);
   </script>
 </body>
 </html>"""
