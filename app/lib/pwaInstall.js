@@ -1,4 +1,5 @@
 export const PWA_INSTALL_OPEN_EVENT = 'guji:pwa-install-open';
+export const PWA_INSTALL_STATE_CHANGE_EVENT = 'guji:pwa-install-state-change';
 
 const INSTALL_STATE_KEY = 'guji_pwa_install_state_v1';
 const STANDALONE_SEEN_KEY = 'guji_pwa_standalone_seen_v1';
@@ -103,6 +104,7 @@ export function updatePwaInstallState(patch) {
   } catch {
     // 本地状态写入失败时，不影响页面的正常使用。
   }
+  window.dispatchEvent(new CustomEvent(PWA_INSTALL_STATE_CHANGE_EVENT, { detail: next }));
   return next;
 }
 

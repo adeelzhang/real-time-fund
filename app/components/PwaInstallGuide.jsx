@@ -28,6 +28,7 @@ import {
   hasBlockingPwaGuideUi,
   isStandaloneMode,
   markStandaloneSeen,
+  readPwaInstallState,
   recordPwaInstallDismissal,
   shouldAutoShowPwaGuide,
   updatePwaInstallState
@@ -289,6 +290,10 @@ export default function PwaInstallGuide() {
     const handleManualOpen = () => {
       if (isStandaloneMode()) {
         toast.success('已添加到主屏幕', { description: '当前正在桌面模式中运行' });
+        return;
+      }
+      if (readPwaInstallState().installed) {
+        toast.success('已添加到主屏幕', { description: '请从手机桌面的“估基”图标打开' });
         return;
       }
       if (!detectPwaEnvironment().isMobile) {
