@@ -1,7 +1,10 @@
 export const PWA_INSTALL_OPEN_EVENT = 'guji:pwa-install-open';
 export const PWA_INSTALL_STATE_CHANGE_EVENT = 'guji:pwa-install-state-change';
+export const PWA_INSTALL_PROMPT_READY_EVENT = 'guji:pwa-install-prompt-ready';
 
-const INSTALL_STATE_KEY = 'guji_pwa_install_state_v1';
+// v2 intentionally discards the old manual "I added it" marker. It did not
+// prove that Android had actually created a home-screen icon.
+const INSTALL_STATE_KEY = 'guji_pwa_install_state_v2';
 const STANDALONE_SEEN_KEY = 'guji_pwa_standalone_seen_v1';
 const REMINDER_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
 

@@ -24,6 +24,7 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } f
 import { sendAnalytics } from './SelfAnalytics';
 import {
   PWA_INSTALL_OPEN_EVENT,
+  PWA_INSTALL_PROMPT_READY_EVENT,
   detectPwaEnvironment,
   hasBlockingPwaGuideUi,
   isStandaloneMode,
@@ -100,8 +101,10 @@ function Step({ number, icon: Icon, children }) {
 
 function getGuideVariant(environment, promptReady) {
   if (environment.isAndroid && environment.isInApp) return 'android-in-app';
-  if (environment.isAndroid && environment.browser !== 'chrome') return 'android-recommend-chrome';
-  if (environment.isAndroid && promptReady && !environment.isInApp) return 'android-native';
+  if (environment.isAndroid && environment.browser === 'chrome') {
+    return promptReady ? 'android-native' : 'android-chrome-manual';
+  }
+  if (environment.isAndroid) return 'android-recommend-chrome';
   if (environment.isIOS && environment.isSafari) return 'ios-safari';
   if (environment.isIOS && environment.isWeChat) return 'ios-wechat';
   if (environment.isInApp) return 'in-app';
@@ -156,11 +159,11 @@ export default function PwaInstallGuide() {
     toast.success('已关闭自动提醒', { description: '仍可在“我的”中随时查看添加方法' });
   }, [closeWithoutDismiss]);
 
-  const handleMarkedInstalled = useCallback(() => {
-    updatePwaInstallState({ installed: true, suppressed: true });
-    sendAnalytics('pwa_marked_installed');
+  const handleManualComplete = useCallback(() => {
+    updatePwaInstallState({ suppressed: true });
+    sendAnalytics('pwa_manual_guide_completed');
     closeWithoutDismiss();
-    toast.success('已记录', { description: '之后不会再自动提醒' });
+    toast.success('已关闭提醒', { description: '添加完成后可从桌面图标打开' });
   }, [closeWithoutDismiss]);
 
   const handleCopyUrl = useCallback(async () => {
@@ -199,9 +202,9 @@ export default function PwaInstallGuide() {
       await installPrompt.prompt();
       const choice = await installPrompt.userChoice;
       deferredPromptRef.current = null;
+      window.__gujiDeferredPwaPrompt = null;
       setPromptReady(false);
       if (choice?.outcome === 'accepted') {
-        updatePwaInstallState({ installed: true, suppressed: true });
         sendAnalytics('pwa_prompt_accepted');
         closeWithoutDismiss();
       } else {
@@ -215,6 +218,17 @@ export default function PwaInstallGuide() {
       setInstalling(false);
     }
   }, [closeWithoutDismiss]);
+
+  const handleRetryChromeInstall = useCallback(() => {
+    const installPrompt = window.__gujiDeferredPwaPrompt;
+    if (installPrompt) {
+      deferredPromptRef.current = installPrompt;
+      setPromptReady(true);
+      toast.success('安装面板已准备好', { description: '请点击“立即添加”' });
+      return;
+    }
+    toast.info('请从 Chrome 菜单安装', { description: '点击右上角 ⋮，选择“安装应用”或“添加到主屏幕”' });
+  }, []);
 
   const handleVisualGuideOpen = useCallback(() => {
     setVisualGuideStep(0);
@@ -277,10 +291,18 @@ export default function PwaInstallGuide() {
     const handleBeforeInstallPrompt = (event) => {
       event.preventDefault();
       deferredPromptRef.current = event;
+      window.__gujiDeferredPwaPrompt = event;
+      setPromptReady(true);
+    };
+    const syncDeferredPrompt = () => {
+      const installPrompt = window.__gujiDeferredPwaPrompt;
+      if (!installPrompt) return;
+      deferredPromptRef.current = installPrompt;
       setPromptReady(true);
     };
     const handleAppInstalled = () => {
       deferredPromptRef.current = null;
+      window.__gujiDeferredPwaPrompt = null;
       setPromptReady(false);
       updatePwaInstallState({ installed: true, suppressed: true });
       sendAnalytics('pwa_app_installed');
@@ -306,11 +328,14 @@ export default function PwaInstallGuide() {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
     window.addEventListener(PWA_INSTALL_OPEN_EVENT, handleManualOpen);
+    window.addEventListener(PWA_INSTALL_PROMPT_READY_EVENT, syncDeferredPrompt);
+    syncDeferredPrompt();
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
       window.removeEventListener(PWA_INSTALL_OPEN_EVENT, handleManualOpen);
+      window.removeEventListener(PWA_INSTALL_PROMPT_READY_EVENT, syncDeferredPrompt);
     };
   }, [closeWithoutDismiss, showGuide]);
 
@@ -360,6 +385,16 @@ export default function PwaInstallGuide() {
       title: '一键添加到主屏幕',
       description: '点击“立即添加”后，系统会直接创建估基桌面图标。',
       steps: [[Check, '浏览器将直接打开系统安装面板']]
+    },
+    'android-chrome-manual': {
+      badge: 'Android · Chrome',
+      title: '从 Chrome 菜单添加',
+      description: 'Chrome 暂未显示一键安装面板时，可直接从浏览器菜单创建桌面图标。',
+      steps: [
+        [MoreVertical, '点击 Chrome 右上角的“⋮”菜单'],
+        [SquarePlus, '选择“安装应用”或“添加到主屏幕”'],
+        [Check, '在系统提示中确认，估基图标会出现在桌面']
+      ]
     },
     'ios-safari': {
       badge: 'iOS · Safari',
@@ -622,15 +657,20 @@ export default function PwaInstallGuide() {
                     <ExternalLink aria-hidden />
                     使用 Chrome 打开
                   </button>
+                ) : variant === 'android-chrome-manual' ? (
+                  <button type="button" className="button pwa-install-primary" onClick={handleRetryChromeInstall}>
+                    <Download aria-hidden />
+                    重新检测安装
+                  </button>
                 ) : needsBrowserTransfer ? (
                   <button type="button" className="button pwa-install-primary" onClick={handleCopyUrl}>
                     <ExternalLink aria-hidden />
                     复制主站网址
                   </button>
                 ) : (
-                  <button type="button" className="button pwa-install-primary" onClick={handleMarkedInstalled}>
+                  <button type="button" className="button pwa-install-primary" onClick={handleManualComplete}>
                     <CheckCircle2 aria-hidden />
-                    我已添加
+                    完成后关闭提醒
                   </button>
                 )}
 
@@ -641,8 +681,8 @@ export default function PwaInstallGuide() {
 
               <div className="pwa-install-text-actions">
                 {needsBrowserTransfer ? (
-                  <button type="button" onClick={handleMarkedInstalled}>
-                    我已添加
+                  <button type="button" onClick={handleManualComplete}>
+                    完成后关闭提醒
                   </button>
                 ) : null}
                 <button type="button" onClick={handleNeverRemind}>

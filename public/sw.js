@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'guji-static-';
-const CACHE_NAME = `${CACHE_PREFIX}v9`;
+const CACHE_NAME = `${CACHE_PREFIX}v10`;
 const OFFLINE_URL = '/offline.html';
 const APP_SHELL = [
   '/',
