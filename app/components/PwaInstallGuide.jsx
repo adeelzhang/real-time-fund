@@ -28,6 +28,7 @@ import {
   hasBlockingPwaGuideUi,
   isStandaloneMode,
   markStandaloneSeen,
+  openPwaInstallGuide,
   recordPwaInstallDismissal,
   shouldAutoShowPwaGuide,
   updatePwaInstallState
@@ -181,14 +182,6 @@ export default function PwaInstallGuide() {
     window.location.assign(chromeIntent);
   }, []);
 
-  const handleOpenNativeChromeInstall = useCallback(() => {
-    const targetUrl = new URL('/', window.location.origin);
-    targetUrl.searchParams.set('source', 'android-install');
-    if (window.location.pathname === targetUrl.pathname && window.location.search === targetUrl.search) return;
-    sendAnalytics('pwa_android_native_install_opened');
-    window.location.assign(targetUrl);
-  }, []);
-
   const handleVisualGuideOpen = useCallback(() => {
     setVisualGuideStep(0);
     setVisualGuideDirection(1);
@@ -263,7 +256,7 @@ export default function PwaInstallGuide() {
         return;
       }
       if (nextEnvironment.isAndroid && nextEnvironment.browser === 'chrome') {
-        handleOpenNativeChromeInstall();
+        openPwaInstallGuide();
         return;
       }
       showGuide('manual');
@@ -276,7 +269,7 @@ export default function PwaInstallGuide() {
       window.removeEventListener('appinstalled', handleAppInstalled);
       window.removeEventListener(PWA_INSTALL_OPEN_EVENT, handleManualOpen);
     };
-  }, [closeWithoutDismiss, handleOpenNativeChromeInstall, showGuide]);
+  }, [closeWithoutDismiss, showGuide]);
 
   useEffect(() => {
     let timeoutId;
@@ -571,7 +564,7 @@ export default function PwaInstallGuide() {
 
               <div className="pwa-install-actions">
                 {variant === 'android-chrome' ? (
-                  <button type="button" className="button pwa-install-primary" onClick={handleOpenNativeChromeInstall}>
+                  <button type="button" className="button pwa-install-primary" onClick={openPwaInstallGuide}>
                     <Download aria-hidden />
                     打开安装面板
                   </button>

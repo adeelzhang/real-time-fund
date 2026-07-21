@@ -152,5 +152,21 @@ export function hasBlockingPwaGuideUi() {
 
 export function openPwaInstallGuide() {
   if (typeof window === 'undefined') return;
+
+  const environment = detectPwaEnvironment();
+  if (environment.isAndroid && environment.browser === 'chrome' && !isStandaloneMode()) {
+    // Do this at the click source rather than through a React event listener.
+    // The first navigation exactly matches the Vivo browser transfer. A unique
+    // retry is only needed when the user is already on that installation page.
+    const targetUrl = new URL('/', window.location.origin);
+    targetUrl.searchParams.set('source', 'android-install');
+    const isAlreadyOnInstallPage =
+      window.location.pathname === targetUrl.pathname &&
+      new URLSearchParams(window.location.search).get('source') === 'android-install';
+    if (isAlreadyOnInstallPage) targetUrl.searchParams.set('pwa', Date.now().toString(36));
+    window.location.assign(targetUrl.toString());
+    return;
+  }
+
   window.dispatchEvent(new CustomEvent(PWA_INSTALL_OPEN_EVENT));
 }
