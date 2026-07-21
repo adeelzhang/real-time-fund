@@ -1,4 +1,5 @@
 export const PWA_INSTALL_OPEN_EVENT = 'guji:pwa-install-open';
+export const PWA_INSTALL_PROMPT_READY_EVENT = 'guji:pwa-install-prompt-ready';
 
 const INSTALL_STATE_KEY = 'guji_pwa_install_state_v3';
 const STANDALONE_SEEN_KEY = 'guji_pwa_standalone_seen_v1';
@@ -155,17 +156,23 @@ export function openPwaInstallGuide() {
 
   const environment = detectPwaEnvironment();
   if (environment.isAndroid && environment.browser === 'chrome' && !isStandaloneMode()) {
-    // Do this at the click source rather than through a React event listener.
-    // The first navigation exactly matches the Vivo browser transfer. A unique
-    // retry is only needed when the user is already on that installation page.
-    const targetUrl = new URL('/', window.location.origin);
-    targetUrl.searchParams.set('source', 'android-install');
-    const isAlreadyOnInstallPage =
-      window.location.pathname === targetUrl.pathname &&
-      new URLSearchParams(window.location.search).get('source') === 'android-install';
-    if (isAlreadyOnInstallPage) targetUrl.searchParams.set('pwa', Date.now().toString(36));
-    window.location.assign(targetUrl.toString());
-    return;
+    const installPrompt = window.__gujiDeferredPwaPrompt;
+    if (installPrompt?.prompt) {
+      try {
+        // prompt() must run synchronously inside the user's tap handler.
+        const promptResult = installPrompt.prompt();
+        Promise.resolve(promptResult)
+          .then(() => installPrompt.userChoice)
+          .then((choice) => {
+            window.__gujiDeferredPwaPrompt = null;
+            if (choice?.outcome === 'accepted') updatePwaInstallState({ suppressed: true });
+          })
+          .catch(() => undefined);
+        return;
+      } catch {
+        // Fall through to the normal guide only when Chrome refuses the panel.
+      }
+    }
   }
 
   window.dispatchEvent(new CustomEvent(PWA_INSTALL_OPEN_EVENT));

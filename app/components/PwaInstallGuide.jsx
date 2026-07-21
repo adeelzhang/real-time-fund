@@ -256,7 +256,7 @@ export default function PwaInstallGuide() {
         return;
       }
       if (nextEnvironment.isAndroid && nextEnvironment.browser === 'chrome') {
-        openPwaInstallGuide();
+        toast.info('Chrome 正在准备安装面板', { description: '请刷新页面后再点击“添加到主屏幕”' });
         return;
       }
       showGuide('manual');

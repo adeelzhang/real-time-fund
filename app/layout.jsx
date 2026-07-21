@@ -110,7 +110,7 @@ export default function RootLayout({ children }) {
         {/* 尽早设置 data-theme，减少首屏主题闪烁；与 suppressHydrationWarning 配合避免服务端/客户端 html 属性不一致报错 */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();`
+            __html: `(function(){try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}try{if(new URLSearchParams(location.search).get("source")!=="android-install"){window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__gujiDeferredPwaPrompt=e;window.dispatchEvent(new Event("guji:pwa-install-prompt-ready"));});}}catch(e){}})();`
           }}
         />
       </head>
