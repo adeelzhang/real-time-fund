@@ -1,18 +1,13 @@
 export const PWA_INSTALL_OPEN_EVENT = 'guji:pwa-install-open';
-export const PWA_INSTALL_STATE_CHANGE_EVENT = 'guji:pwa-install-state-change';
-export const PWA_INSTALL_PROMPT_READY_EVENT = 'guji:pwa-install-prompt-ready';
 
-// v2 intentionally discards the old manual "I added it" marker. It did not
-// prove that Android had actually created a home-screen icon.
-const INSTALL_STATE_KEY = 'guji_pwa_install_state_v2';
+const INSTALL_STATE_KEY = 'guji_pwa_install_state_v3';
 const STANDALONE_SEEN_KEY = 'guji_pwa_standalone_seen_v1';
 const REMINDER_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
 
 const DEFAULT_STATE = {
   dismissCount: 0,
   lastDismissedAt: 0,
-  suppressed: false,
-  installed: false
+  suppressed: false
 };
 
 export function isStandaloneMode() {
@@ -91,8 +86,7 @@ export function readPwaInstallState() {
     return {
       dismissCount: Number.isFinite(saved.dismissCount) ? Math.max(0, saved.dismissCount) : 0,
       lastDismissedAt: Number.isFinite(saved.lastDismissedAt) ? saved.lastDismissedAt : 0,
-      suppressed: saved.suppressed === true,
-      installed: saved.installed === true
+      suppressed: saved.suppressed === true
     };
   } catch {
     return { ...DEFAULT_STATE };
@@ -107,7 +101,6 @@ export function updatePwaInstallState(patch) {
   } catch {
     // 本地状态写入失败时，不影响页面的正常使用。
   }
-  window.dispatchEvent(new CustomEvent(PWA_INSTALL_STATE_CHANGE_EVENT, { detail: next }));
   return next;
 }
 
@@ -122,7 +115,10 @@ export function recordPwaInstallDismissal() {
 export function shouldAutoShowPwaGuide(now = Date.now()) {
   const environment = detectPwaEnvironment();
   const state = readPwaInstallState();
-  if (!environment.isMobile || isStandaloneMode() || state.installed || state.suppressed) return false;
+  if (!environment.isMobile || isStandaloneMode() || state.suppressed) return false;
+  // Android Chrome uses its own native installation panel. Do not cover it
+  // with a web drawer that looks similar but is not the system installer.
+  if (environment.isAndroid && environment.browser === 'chrome') return false;
   if (state.dismissCount === 0) return true;
   if (state.dismissCount >= 2) return false;
   return now - state.lastDismissedAt >= REMINDER_DELAY_MS;
@@ -130,7 +126,7 @@ export function shouldAutoShowPwaGuide(now = Date.now()) {
 
 export function markStandaloneSeen() {
   if (typeof window === 'undefined') return;
-  updatePwaInstallState({ installed: true, suppressed: true });
+  updatePwaInstallState({ suppressed: true });
   try {
     window.localStorage.setItem(STANDALONE_SEEN_KEY, '1');
   } catch {

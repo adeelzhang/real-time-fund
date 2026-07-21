@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { AnimatePresence } from 'framer-motion';
@@ -8,7 +8,6 @@ import {
   BookOpen,
   Calculator,
   CalendarDays,
-  CheckCircle2,
   ChevronRight,
   Cloud,
   FileText,
@@ -20,12 +19,7 @@ import {
 } from 'lucide-react';
 import { LoginIcon } from './Icons';
 import ConfirmModal from './ConfirmModal';
-import {
-  isStandaloneMode,
-  openPwaInstallGuide,
-  PWA_INSTALL_STATE_CHANGE_EVENT,
-  readPwaInstallState
-} from '@/app/lib/pwaInstall';
+import { openPwaInstallGuide } from '@/app/lib/pwaInstall';
 
 function MenuRow({ icon: Icon, label, description, onClick, disabled = false, danger = false, compact = false }) {
   return (
@@ -76,20 +70,6 @@ export default function MineTab({
   onOpenSettings
 }) {
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
-  const [isPwaInstalled, setIsPwaInstalled] = useState(false);
-
-  useEffect(() => {
-    const refreshPwaState = () => setIsPwaInstalled(isStandaloneMode() || readPwaInstallState().installed);
-    refreshPwaState();
-    window.addEventListener('appinstalled', refreshPwaState);
-    window.addEventListener('pageshow', refreshPwaState);
-    window.addEventListener(PWA_INSTALL_STATE_CHANGE_EVENT, refreshPwaState);
-    return () => {
-      window.removeEventListener('appinstalled', refreshPwaState);
-      window.removeEventListener('pageshow', refreshPwaState);
-      window.removeEventListener(PWA_INSTALL_STATE_CHANGE_EVENT, refreshPwaState);
-    };
-  }, []);
   const handleInfoNavigate = () => sessionStorage.setItem('guji-info-return', 'mine');
 
   return (
@@ -145,26 +125,15 @@ export default function MineTab({
       </section>
 
       <section className="mine-install-section" aria-label="添加到主屏幕">
-        <button
-          type="button"
-          className={`mine-install-card${isPwaInstalled ? ' is-installed' : ''}`}
-          onClick={openPwaInstallGuide}
-          disabled={isPwaInstalled}
-        >
+        <button type="button" className="mine-install-card" onClick={openPwaInstallGuide}>
           <span className="mine-install-icon-wrap">
-            {isPwaInstalled ? <CheckCircle2 aria-hidden /> : <SquarePlus aria-hidden />}
+            <SquarePlus aria-hidden />
           </span>
           <span className="mine-install-copy">
-            <span className="mine-install-title">{isPwaInstalled ? '已添加到主屏幕' : '添加到主屏幕'}</span>
-            <span className="mine-install-description">
-              {isPwaInstalled
-                ? isStandaloneMode()
-                  ? '当前正以桌面快捷方式打开'
-                  : '可从手机桌面的“估基”图标打开'
-                : '像 App 一样从手机桌面快速打开'}
-            </span>
+            <span className="mine-install-title">添加到主屏幕</span>
+            <span className="mine-install-description">像 App 一样从手机桌面快速打开</span>
           </span>
-          {!isPwaInstalled ? <ChevronRight className="mine-install-chevron" aria-hidden /> : null}
+          <ChevronRight className="mine-install-chevron" aria-hidden />
         </button>
       </section>
 
