@@ -1,0 +1,43 @@
+<svg width="720" height="960" viewBox="0 0 720 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="720" height="960" fill="#EDF3F8"/>
+  <rect x="32" y="24" width="656" height="912" rx="38" fill="#FFFFFF" stroke="#D6E0EA" stroke-width="2"/>
+  <rect x="32" y="24" width="656" height="56" rx="38" fill="#F6F8FB"/>
+  <rect x="32" y="54" width="656" height="26" fill="#F6F8FB"/>
+  <text x="62" y="59" fill="#182334" font-family="Arial, PingFang SC, sans-serif" font-size="20" font-weight="700">9:41</text>
+  <text x="572" y="59" fill="#182334" font-family="Arial, PingFang SC, sans-serif" font-size="17" font-weight="700">5G</text>
+  <rect x="618" y="43" width="34" height="17" rx="4" stroke="#182334" stroke-width="3"/>
+  <rect x="653" y="48" width="4" height="8" rx="2" fill="#182334"/>
+  <rect x="58" y="100" width="604" height="58" rx="29" fill="#F1F4F8"/>
+  <circle cx="92" cy="129" r="13" fill="#3C8F5B"/>
+  <path d="M87 129L91 133L98 124" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="118" y="136" fill="#344257" font-family="Arial, PingFang SC, sans-serif" font-size="18" font-weight="600">www.myfunds.cc</text>
+  <circle cx="622" cy="119" r="28" fill="#FFFFFF" stroke="#FF3B30" stroke-width="5"/>
+  <circle cx="622" cy="107" r="3.6" fill="#172033"/><circle cx="622" cy="119" r="3.6" fill="#172033"/><circle cx="622" cy="131" r="3.6" fill="#172033"/>
+  <path d="M570 165C570 151 581 140 595 140H649C663 140 674 151 674 165V205C674 219 663 230 649 230H595C581 230 570 219 570 205V165Z" fill="#FF3B30"/>
+  <path d="M616 230L622 241L629 230" fill="#FF3B30"/>
+  <text x="594" y="183" fill="white" font-family="Arial, PingFang SC, sans-serif" font-size="15" font-weight="700">点击</text>
+  <text x="590" y="205" fill="white" font-family="Arial, PingFang SC, sans-serif" font-size="15" font-weight="700">菜单</text>
+  <rect x="60" y="184" width="600" height="126" rx="18" fill="#15243A"/>
+  <text x="84" y="224" fill="#B8C8DA" font-family="Arial, PingFang SC, sans-serif" font-size="15" font-weight="600">估基</text>
+  <text x="84" y="266" fill="white" font-family="Arial, PingFang SC, sans-serif" font-size="26" font-weight="700">实时基金估值</text>
+  <rect x="84" y="281" width="166" height="8" rx="4" fill="#47749A"/>
+  <rect x="60" y="330" width="600" height="146" rx="18" fill="#FFFFFF" stroke="#DEE7EF" stroke-width="2"/>
+  <text x="84" y="364" fill="#3A4960" font-family="Arial, PingFang SC, sans-serif" font-size="16" font-weight="600">我的基金</text>
+  <text x="84" y="406" fill="#172033" font-family="Arial, PingFang SC, sans-serif" font-size="24" font-weight="700">今日收益</text>
+  <text x="84" y="446" fill="#E5484D" font-family="Arial, PingFang SC, sans-serif" font-size="30" font-weight="700">+ 128.60</text>
+  <path d="M428 435L451 408L476 420L506 374L538 390L574 348L620 368" stroke="#E5484D" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="60" y="496" width="600" height="150" rx="18" fill="#FFFFFF" stroke="#DEE7EF" stroke-width="2"/>
+  <rect x="84" y="522" width="98" height="16" rx="8" fill="#DCE6F0"/>
+  <rect x="84" y="554" width="226" height="20" rx="10" fill="#233B57"/>
+  <rect x="84" y="592" width="152" height="12" rx="6" fill="#DCE6F0"/>
+  <rect x="446" y="540" width="142" height="14" rx="7" fill="#DCE6F0"/>
+  <rect x="478" y="576" width="110" height="26" rx="13" fill="#E7F6EB"/>
+  <rect x="60" y="798" width="600" height="98" rx="0" fill="#FFFFFF"/>
+  <path d="M60 798H660" stroke="#DEE7EF" stroke-width="2"/>
+  <circle cx="160" cy="839" r="14" fill="#2E7CE6"/><circle cx="360" cy="839" r="14" fill="#C9D5E1"/><circle cx="560" cy="839" r="14" fill="#C9D5E1"/>
+  <text x="138" y="875" fill="#2E7CE6" font-family="Arial, PingFang SC, sans-serif" font-size="14" font-weight="600">首页</text>
+  <text x="538" y="875" fill="#738196" font-family="Arial, PingFang SC, sans-serif" font-size="14" font-weight="600">我的</text>
+  <circle cx="72" cy="99" r="20" fill="#FF3B30"/>
+  <text x="66" y="106" fill="white" font-family="Arial, sans-serif" font-size="18" font-weight="700">1</text>
+  <text x="360" y="923" text-anchor="middle" fill="#607086" font-family="Arial, PingFang SC, sans-serif" font-size="18" font-weight="600">在浏览器右上角打开菜单</text>
+</svg>

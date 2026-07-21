@@ -65,6 +65,24 @@ const WECHAT_IOS_VISUAL_GUIDE = [
   }
 ];
 
+const ANDROID_VISUAL_GUIDE = [
+  {
+    image: '/pwa-guide/android-step-1.svg',
+    title: '打开浏览器菜单',
+    description: '在 Chrome 或系统浏览器右上角，点击“⋮”菜单。'
+  },
+  {
+    image: '/pwa-guide/android-step-2.svg',
+    title: '选择安装应用',
+    description: '在菜单中点击“安装应用”或“添加到主屏幕”。'
+  },
+  {
+    image: '/pwa-guide/android-step-3.svg',
+    title: '确认添加',
+    description: '在系统安装面板确认后，估基图标会出现在桌面。'
+  }
+];
+
 function Step({ number, icon: Icon, children }) {
   return (
     <li className="pwa-install-step">
@@ -80,6 +98,7 @@ function Step({ number, icon: Icon, children }) {
 }
 
 function getGuideVariant(environment, promptReady) {
+  if (environment.isAndroid && environment.isInApp) return 'android-in-app';
   if (environment.isAndroid && promptReady && !environment.isInApp) return 'android-native';
   if (environment.isIOS && environment.isSafari) return 'ios-safari';
   if (environment.isIOS && environment.isWeChat) return 'ios-wechat';
@@ -101,7 +120,12 @@ export default function PwaInstallGuide() {
   const reduceMotion = useReducedMotion();
 
   const variant = useMemo(() => getGuideVariant(environment, promptReady), [environment, promptReady]);
-  const visualGuideItems = variant === 'ios-wechat' ? WECHAT_IOS_VISUAL_GUIDE : IOS_VISUAL_GUIDE;
+  const visualGuideItems = useMemo(() => {
+    if (variant.startsWith('android')) return ANDROID_VISUAL_GUIDE;
+    if (variant === 'ios-wechat') return WECHAT_IOS_VISUAL_GUIDE;
+    if (variant === 'ios-safari') return IOS_VISUAL_GUIDE;
+    return [];
+  }, [variant]);
 
   const closeWithoutDismiss = useCallback(() => {
     setOpen(false);
@@ -150,7 +174,11 @@ export default function PwaInstallGuide() {
 
   const handleNativeInstall = useCallback(async () => {
     const installPrompt = deferredPromptRef.current;
-    if (!installPrompt) return;
+    if (!installPrompt) {
+      setPromptReady(false);
+      toast.info('当前浏览器未提供安装面板', { description: '可按图片指引从浏览器菜单添加到主屏幕' });
+      return;
+    }
 
     setInstalling(true);
     sendAnalytics('pwa_install_cta_clicked');
@@ -311,13 +339,10 @@ export default function PwaInstallGuide() {
 
   const guideContent = {
     'android-native': {
-      badge: 'Android',
-      title: '添加估基到主屏幕',
-      description: '点击下方按钮后，在系统面板中确认安装。',
-      steps: [
-        [Download, '点击“添加到主屏幕”唤起系统安装面板'],
-        [Check, '在系统提示中确认安装']
-      ]
+      badge: 'Android · 可直接安装',
+      title: '一键添加到主屏幕',
+      description: '点击“立即添加”后，系统会直接创建估基桌面图标。',
+      steps: [[Check, '浏览器将直接打开系统安装面板']]
     },
     'ios-safari': {
       badge: 'iOS · Safari',
@@ -362,25 +387,46 @@ export default function PwaInstallGuide() {
     'android-manual': {
       badge: 'Android',
       title: '添加估基到主屏幕',
-      description: '按照浏览器菜单中的选项完成添加。',
+      description: '当前浏览器没有提供一键安装，按图片指引从浏览器菜单添加。',
       steps: [
         [MoreVertical, '点击浏览器右上角菜单'],
         [SquarePlus, '选择“添加到主屏幕”或“安装应用”'],
         [Check, '在系统提示中确认添加']
       ]
+    },
+    'android-in-app': {
+      badge: 'Android · 内置浏览器',
+      title: '请先在系统浏览器打开',
+      description: '内置浏览器不能直接创建快捷方式，请转到 Chrome 或系统浏览器完成添加。',
+      steps: [
+        [MoreVertical, '点击页面右上角的菜单'],
+        [ExternalLink, '选择“在浏览器打开”'],
+        [SquarePlus, '按图片指引添加到主屏幕']
+      ]
     }
   }[variant];
 
-  const needsBrowserTransfer = variant === 'ios-browser' || variant === 'ios-wechat' || variant === 'in-app';
+  const needsBrowserTransfer =
+    variant === 'ios-browser' || variant === 'ios-wechat' || variant === 'in-app' || variant === 'android-in-app';
   const currentVisualStep = visualGuideItems[visualGuideStep];
-  const hasVisualGuide = variant === 'ios-safari' || variant === 'ios-wechat';
-  const visualEntryTitle = variant === 'ios-wechat' ? '查看微信系统浏览器图示' : '查看图片指引';
+  const isAndroidGuide = variant.startsWith('android');
+  const hasVisualGuide = visualGuideItems.length > 0;
+  const visualEntryTitle =
+    variant === 'ios-wechat'
+      ? '查看微信系统浏览器图示'
+      : variant === 'android-native'
+        ? '没有弹出安装面板？查看图片指引'
+        : '查看图片指引';
   const visualEntryDescription =
-    variant === 'ios-wechat' ? '红框标出微信右上角和“系统浏览器”入口' : '红框标出每一步要点的位置';
+    variant === 'ios-wechat'
+      ? '红框标出微信右上角和“系统浏览器”入口'
+      : isAndroidGuide
+        ? '红框标出 Android 浏览器菜单和安装入口'
+        : '红框标出每一步要点的位置';
   const defaultHeight = visualGuideOpen
     ? '86vh'
     : variant === 'android-native'
-      ? '56vh'
+      ? '64vh'
       : variant === 'ios-safari' || variant === 'ios-wechat'
         ? '78vh'
         : '68vh';
@@ -438,7 +484,7 @@ export default function PwaInstallGuide() {
                   >
                     <Image
                       src={currentVisualStep.image}
-                      alt={`移动端操作图第 ${visualGuideStep + 1} 步：${currentVisualStep.description}`}
+                      alt={`操作图第 ${visualGuideStep + 1} 步：${currentVisualStep.description}`}
                       width={720}
                       height={960}
                       sizes="(max-width: 640px) calc(100vw - 40px), 420px"
@@ -544,7 +590,7 @@ export default function PwaInstallGuide() {
                     aria-busy={installing}
                   >
                     <Download aria-hidden />
-                    {installing ? '正在打开…' : '添加到主屏幕'}
+                    {installing ? '正在打开…' : '立即添加'}
                   </button>
                 ) : needsBrowserTransfer ? (
                   <button type="button" className="button pwa-install-primary" onClick={handleCopyUrl}>
