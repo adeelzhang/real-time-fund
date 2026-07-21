@@ -100,6 +100,7 @@ function Step({ number, icon: Icon, children }) {
 function getGuideVariant(environment, promptReady) {
   if (environment.isAndroid && environment.isInApp) return 'android-in-app';
   if (environment.isAndroid && promptReady && !environment.isInApp) return 'android-native';
+  if (environment.isAndroid && environment.isVivoBrowser) return 'android-vivo';
   if (environment.isIOS && environment.isSafari) return 'ios-safari';
   if (environment.isIOS && environment.isWeChat) return 'ios-wechat';
   if (environment.isInApp) return 'in-app';
@@ -170,6 +171,17 @@ export default function PwaInstallGuide() {
     } catch {
       toast.error('复制失败', { description: mainUrl });
     }
+  }, []);
+
+  const handleOpenInChrome = useCallback(() => {
+    const targetUrl = new URL('/', window.location.origin);
+    targetUrl.searchParams.set('source', 'vivo-install');
+    const scheme = targetUrl.protocol.replace(':', '');
+    const intentTarget = `${targetUrl.host}${targetUrl.pathname}${targetUrl.search}`;
+    const chromeIntent = `intent://${intentTarget}#Intent;scheme=${scheme};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(targetUrl.toString())};end`;
+
+    sendAnalytics('pwa_vivo_open_chrome_clicked');
+    window.location.assign(chromeIntent);
   }, []);
 
   const handleNativeInstall = useCallback(async () => {
@@ -403,6 +415,12 @@ export default function PwaInstallGuide() {
         [ExternalLink, '选择“在浏览器打开”'],
         [SquarePlus, '按图片指引添加到主屏幕']
       ]
+    },
+    'android-vivo': {
+      badge: 'vivo 浏览器',
+      title: '用 Chrome 一键添加',
+      description: 'vivo 浏览器不提供网页直调安装，打开 Chrome 后可直接唤起系统安装面板。',
+      steps: [[ExternalLink, '点击下方按钮，在 Chrome 中继续安装']]
     }
   }[variant];
 
@@ -416,7 +434,9 @@ export default function PwaInstallGuide() {
       ? '查看微信系统浏览器图示'
       : variant === 'android-native'
         ? '没有弹出安装面板？查看图片指引'
-        : '查看图片指引';
+        : variant === 'android-vivo'
+          ? '查看 Chrome 安装图示'
+          : '查看图片指引';
   const visualEntryDescription =
     variant === 'ios-wechat'
       ? '红框标出微信右上角和“系统浏览器”入口'
@@ -591,6 +611,10 @@ export default function PwaInstallGuide() {
                   >
                     <Download aria-hidden />
                     {installing ? '正在打开…' : '立即添加'}
+                  </button>
+                ) : variant === 'android-vivo' ? (
+                  <button type="button" className="button pwa-install-primary" onClick={handleOpenInChrome}>
+                    <ExternalLink aria-hidden />用 Chrome 一键添加
                   </button>
                 ) : needsBrowserTransfer ? (
                   <button type="button" className="button pwa-install-primary" onClick={handleCopyUrl}>

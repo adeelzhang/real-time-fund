@@ -29,6 +29,7 @@ export function detectPwaEnvironment() {
       isSafari: false,
       isInApp: false,
       isWeChat: false,
+      isVivoBrowser: false,
       browser: 'other'
     };
   }
@@ -39,6 +40,7 @@ export function detectPwaEnvironment() {
   const isIOS = /iPad|iPhone|iPod/i.test(ua) || isIPadDesktopMode;
   const isAndroid = /Android/i.test(ua);
   const isWeChat = /MicroMessenger/i.test(ua);
+  const isVivoBrowser = /VivoBrowser/i.test(ua);
   const isInApp =
     /MicroMessenger|Weibo|AlipayClient|DingTalk|Feishu|Lark|ByteLocale|Toutiao|Aweme|FBAN|FBAV|Instagram|Line\//i.test(
       ua
@@ -61,6 +63,7 @@ export function detectPwaEnvironment() {
   let browser = 'other';
   if (isInApp) browser = 'in-app';
   else if (isSafari) browser = 'safari';
+  else if (isVivoBrowser) browser = 'vivo';
   else if (/EdgA|EdgiOS/i.test(ua)) browser = 'edge';
   else if (/CriOS|Chrome/i.test(ua)) browser = 'chrome';
   else if (/FxiOS|Firefox/i.test(ua)) browser = 'firefox';
@@ -72,6 +75,7 @@ export function detectPwaEnvironment() {
     isSafari,
     isInApp,
     isWeChat,
+    isVivoBrowser,
     browser
   };
 }
