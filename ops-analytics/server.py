@@ -90,6 +90,7 @@ AUTH_CACHE = {}
 AUTH_CACHE_LOCK = threading.Lock()
 REGISTERED_USERS_CACHE = {"expires_at": 0.0, "data": None}
 REGISTERED_USERS_CACHE_LOCK = threading.Lock()
+REGISTERED_USERS_PAGE_SIZE = 20
 RATE_LIMITS = {}
 RATE_LIMIT_LOCK = threading.Lock()
 GLOBAL_QUOTES_CACHE = {"expires_at": 0.0, "data": None}
@@ -427,11 +428,62 @@ def fetch_registered_users_page(page, per_page):
     payload = json.loads(raw.decode("utf-8")) if raw else {}
     if isinstance(payload, dict):
         users = payload.get("users") if isinstance(payload.get("users"), list) else []
+        if total is None:
+            for key in ("total", "total_count", "totalCount"):
+                try:
+                    if payload.get(key) is not None:
+                        total = max(0, int(payload[key]))
+                        break
+                except (TypeError, ValueError):
+                    pass
     elif isinstance(payload, list):
         users = payload
     else:
         users = []
     return users, total
+
+
+def normalize_registered_user(user):
+    if not isinstance(user, dict):
+        return None
+    email = sanitize(user.get("email"), 320)
+    if not email:
+        return None
+    return {
+        "email": email,
+        "createdAt": sanitize(user.get("created_at"), 64),
+        "lastSignInAt": sanitize(user.get("last_sign_in_at"), 64),
+        "emailConfirmed": bool(user.get("email_confirmed_at") or user.get("confirmed_at")),
+    }
+
+
+def fetch_registered_users_listing(page, per_page):
+    """Return one protected, browser-ready page from Supabase Auth."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return {
+            "configured": False,
+            "page": page,
+            "perPage": per_page,
+            "total": None,
+            "totalKnown": False,
+            "hasMore": False,
+            "users": [],
+            "error": "未配置 SUPABASE_SERVICE_ROLE_KEY",
+        }
+
+    users, total = fetch_registered_users_page(page, per_page)
+    normalized = [user for user in (normalize_registered_user(item) for item in users) if user]
+    return {
+        "configured": True,
+        "page": page,
+        "perPage": per_page,
+        "total": total,
+        "totalKnown": total is not None,
+        "hasMore": len(users) >= per_page,
+        "users": normalized,
+        "fetchedAt": now_ts(),
+        "error": "",
+    }
 
 
 def fetch_registered_users_summary():
@@ -855,6 +907,108 @@ def page_analytics(conn, start_ts, end_ts, today_start, today_end, tz):
     }
 
 
+def describe_referrer(raw_referrer):
+    """Reduce a browser referrer to a useful channel and host label."""
+    raw = sanitize(raw_referrer, 512)
+    if not raw:
+        return "直接访问", "直接访问"
+
+    parsed = urlparse(raw if "://" in raw else f"https://{raw}")
+    host = (parsed.hostname or "").lower().strip(".")
+    if not host:
+        return "其他来源", sanitize(raw, 160)
+    if host.startswith("www."):
+        host = host[4:]
+
+    if host in {"myfunds.cc", "localhost", "127.0.0.1"} or host.endswith(".myfunds.cc"):
+        return "站内跳转", host
+    if any(name in host for name in ("google.", "baidu.com", "bing.com", "sogou.com", "so.com", "sm.cn")):
+        if "google." in host:
+            return "Google 搜索", host
+        if "baidu.com" in host:
+            return "百度搜索", host
+        if "bing.com" in host:
+            return "Bing 搜索", host
+        return "其他搜索", host
+    if any(name in host for name in ("weixin.qq.com", "wechat.com", "weibo.com", "douyin.com", "xiaohongshu.com", "zhihu.com", "qq.com")):
+        if "weixin.qq.com" in host or "wechat.com" in host:
+            return "微信", host
+        if "weibo.com" in host:
+            return "微博", host
+        if "douyin.com" in host:
+            return "抖音", host
+        if "xiaohongshu.com" in host:
+            return "小红书", host
+        if "zhihu.com" in host:
+            return "知乎", host
+        return "QQ", host
+    return "外部网站", host
+
+
+def source_analytics(conn, start_ts, end_ts):
+    """Aggregate referrers without returning full URLs or query parameters."""
+    buckets = {}
+    pv_rows = conn.execute(
+        """
+        SELECT referrer, path, COUNT(*) AS pv
+        FROM events
+        WHERE event_type='pageview' AND ts>=? AND ts<?
+        GROUP BY referrer, path
+        """,
+        (start_ts, end_ts),
+    ).fetchall()
+    uv_rows = conn.execute(
+        """
+        SELECT referrer, COUNT(DISTINCT visitor_id) AS uv
+        FROM events
+        WHERE event_type='pageview' AND ts>=? AND ts<?
+        GROUP BY referrer
+        """,
+        (start_ts, end_ts),
+    ).fetchall()
+
+    for row in pv_rows:
+        channel, detail = describe_referrer(row["referrer"])
+        key = (channel, detail)
+        bucket = buckets.setdefault(
+            key,
+            {"channel": channel, "detail": detail, "pv": 0, "uv": 0, "paths": {}},
+        )
+        path = sanitize(row["path"] or "/", 512)
+        bucket["pv"] += int(row["pv"] or 0)
+        bucket["paths"][path] = bucket["paths"].get(path, 0) + int(row["pv"] or 0)
+
+    for row in uv_rows:
+        channel, detail = describe_referrer(row["referrer"])
+        key = (channel, detail)
+        bucket = buckets.setdefault(
+            key,
+            {"channel": channel, "detail": detail, "pv": 0, "uv": 0, "paths": {}},
+        )
+        bucket["uv"] += int(row["uv"] or 0)
+
+    total_pv = sum(item["pv"] for item in buckets.values())
+    total_uv = count_row(
+        conn,
+        "SELECT COUNT(DISTINCT visitor_id) FROM events WHERE event_type='pageview' AND ts>=? AND ts<?",
+        (start_ts, end_ts),
+    )
+    rows = []
+    for item in sorted(buckets.values(), key=lambda value: (-value["pv"], value["channel"], value["detail"]))[:20]:
+        top_path = max(item["paths"].items(), key=lambda pair: pair[1])[0] if item["paths"] else "-"
+        rows.append(
+            {
+                "channel": item["channel"],
+                "detail": item["detail"],
+                "topPath": top_path,
+                "pv": item["pv"],
+                "uv": item["uv"],
+                "share": round((item["pv"] / total_pv) * 100, 1) if total_pv else 0,
+            }
+        )
+    return {"pv": total_pv, "uv": total_uv, "rows": rows}
+
+
 def build_stats():
     tz = get_tz()
     now = datetime.now(tz)
@@ -903,6 +1057,10 @@ def build_stats():
                 (seven_start,),
             ).fetchall()
         ]
+        source_stats = {
+            "sevenDays": source_analytics(conn, seven_start, end + 1),
+            "month": source_analytics(conn, month_start, end + 1),
+        }
         latest = [
             dict(row)
             for row in conn.execute(
@@ -942,6 +1100,7 @@ def build_stats():
             "pageToday": page_stats["today"],
             "pageTrend": page_stats["trend"],
             "topReferrers": top_referrers,
+            "sourceAnalytics": source_stats,
             "latest": latest,
         }
 
@@ -1215,6 +1374,38 @@ def fetch_hot_sectors(handler, parsed):
     json_response(handler, {"success": True, "data": data, "warnings": errors})
 
 
+def fetch_registered_users_for_admin(handler, parsed):
+    params = parse_qs(parsed.query)
+    page = bounded_int(params.get("page", [1])[0], 1, 1, 10000)
+    per_page = bounded_int(
+        params.get("perPage", [REGISTERED_USERS_PAGE_SIZE])[0],
+        REGISTERED_USERS_PAGE_SIZE,
+        10,
+        100,
+    )
+    try:
+        result = fetch_registered_users_listing(page, per_page)
+    except urllib_error.HTTPError as err:
+        if err.code in {401, 403}:
+            message = "SUPABASE_SERVICE_ROLE_KEY 无权限"
+        else:
+            message = f"客户邮箱读取失败 ({err.code})"
+        json_response(handler, {"ok": False, "error": message}, HTTPStatus.BAD_GATEWAY)
+        return
+    except Exception as err:
+        json_response(
+            handler,
+            {"ok": False, "error": f"客户邮箱读取失败: {sanitize(err, 160)}"},
+            HTTPStatus.BAD_GATEWAY,
+        )
+        return
+
+    if not result.get("configured"):
+        json_response(handler, {"ok": False, **result}, HTTPStatus.SERVICE_UNAVAILABLE)
+        return
+    json_response(handler, {"ok": True, **result})
+
+
 OPS_HTML = r"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -1476,6 +1667,24 @@ OPS_HTML = r"""<!doctype html>
     }
     .map-empty.hidden { display: none; }
     .page-analytics-grid { grid-template-columns: minmax(280px, 1fr) minmax(0, 1.35fr); }
+    .email-panel { margin-top: 12px; }
+    .email-table-scroll { max-height: 360px; }
+    .email-table td:first-child { min-width: 220px; }
+    .email-status { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .pagination { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    .pagination button { height: 34px; padding: 0 11px; font-size: 12px; }
+    .pagination button:disabled { cursor: not-allowed; opacity: .45; }
+    .source-analysis-grid { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); }
+    .source-range { display: inline-flex; gap: 4px; }
+    .source-range button { height: 30px; padding: 0 10px; border-radius: 6px; font-size: 12px; }
+    .source-range button.active { background: var(--text); color: #fff; }
+    .source-summary { display: flex; gap: 18px; margin: 14px 0 8px; color: var(--muted); font-size: 12px; }
+    .source-summary strong { color: var(--text); font-size: 16px; }
+    .source-channel { font-weight: 650; }
+    .source-detail { color: var(--muted); font-size: 12px; }
+    .source-share { min-width: 110px; }
+    .source-share-track { display: inline-block; width: 64px; height: 6px; margin-right: 6px; vertical-align: middle; overflow: hidden; border-radius: 3px; background: #e8edf4; }
+    .source-share-track i { display: block; height: 100%; border-radius: inherit; background: var(--blue); }
     .table-scroll { max-height: 390px; overflow: auto; }
     .table-scroll thead { position: sticky; top: 0; z-index: 1; background: var(--panel); }
     .page-path { max-width: 360px; word-break: break-all; }
@@ -1519,6 +1728,8 @@ OPS_HTML = r"""<!doctype html>
       .page-selector { align-items: stretch; flex-direction: column; }
       select { max-width: none; width: 100%; }
       .geo-point-tooltip { left: auto; right: 0; transform: none; }
+      .source-summary { gap: 12px; flex-wrap: wrap; }
+      .email-table td:first-child { min-width: 170px; }
     }
   </style>
 </head>
@@ -1651,13 +1862,59 @@ OPS_HTML = r"""<!doctype html>
       </div>
     </section>
 
+    <section class="panel email-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>已注册客户邮箱</h2>
+          <div class="email-status" id="emailStatus">登录后分页读取 Supabase Auth 中的邮箱账号</div>
+        </div>
+        <div class="pagination" style="margin-top:0">
+          <button type="button" class="secondary" id="emailPrev" disabled>上一页</button>
+          <span class="status" id="emailPageLabel">第 1 页</span>
+          <button type="button" class="secondary" id="emailNext" disabled>下一页</button>
+        </div>
+      </div>
+      <div class="table-scroll email-table-scroll">
+        <table class="email-table"><thead><tr><th>邮箱</th><th>注册时间</th><th>最近登录</th><th>邮箱状态</th></tr></thead><tbody id="registeredUserRows"><tr><td colspan="4" class="empty">登录后加载</td></tr></tbody></table>
+      </div>
+    </section>
+
+    <section class="grid source-analysis-grid">
+      <div class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>页面来源分析</h2>
+            <div class="chart-meta" id="sourceMeta">最近 7 天 · 按来源渠道统计</div>
+          </div>
+          <div class="source-range" role="group" aria-label="来源分析时间范围">
+            <button type="button" class="active" data-source-range="sevenDays" aria-pressed="true">7 天</button>
+            <button type="button" class="secondary" data-source-range="month" aria-pressed="false">30 天</button>
+          </div>
+        </div>
+        <div class="source-summary"><span>PV <strong id="sourcePv">0</strong></span><span>UV <strong id="sourceUv">0</strong></span></div>
+        <div class="table-scroll">
+          <table><thead><tr><th>渠道</th><th>主要来源</th><th>主要落地页</th><th>PV</th><th>UV</th><th>占比</th></tr></thead><tbody id="sourceAnalyticsRows"></tbody></table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>来源说明</h2>
+        <div class="chart-meta" style="margin-top:8px">系统会将浏览器来源归类为搜索、社交、外部网站、站内跳转或直接访问。</div>
+        <table style="margin-top:10px"><thead><tr><th>渠道</th><th>识别规则</th></tr></thead><tbody>
+          <tr><td>搜索</td><td>Google、百度、Bing 等搜索引擎</td></tr>
+          <tr><td>社交</td><td>微信、微博、抖音、小红书、知乎、QQ</td></tr>
+          <tr><td>直接访问</td><td>没有浏览器来源页的访问</td></tr>
+          <tr><td>外部网站</td><td>其他站点带来的访问</td></tr>
+        </tbody></table>
+      </div>
+    </section>
+
     <section class="grid">
       <div class="panel">
         <h2>最近访问</h2>
         <table><thead><tr><th>时间</th><th>事件</th><th>页面</th></tr></thead><tbody id="latest"></tbody></table>
       </div>
       <div class="panel">
-        <h2>来源</h2>
+        <h2>最近来源明细</h2>
         <table><thead><tr><th>来源</th><th>PV</th></tr></thead><tbody id="topReferrers"></tbody></table>
       </div>
     </section>
@@ -1685,17 +1942,25 @@ OPS_HTML = r"""<!doctype html>
       height: 0,
       points: { pv: [], uv: [] }
     };
+    const emailState = { page: 1, perPage: 20, hasMore: false, total: null };
+    const sourceState = { range: 'sevenDays', data: { sevenDays: {}, month: {} } };
+    let emailLoaded = false;
 
     function setStatus(text) { $('status').textContent = text; }
+    function formatDate(value) {
+      if (!value) return '-';
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN');
+    }
     function setLoginModal(open) {
       $('loginModal').hidden = !open;
       document.body.classList.toggle('modal-open', open);
       if (open) window.setTimeout(() => usernameInput.focus(), 0);
     }
     function setLoginError(text) { $('loginError').textContent = text || ''; }
-    function setRows(id, rows, render) {
+    function setRows(id, rows, render, colspan = 3) {
       const el = $(id);
-      el.innerHTML = rows.length ? rows.map(render).join('') : '<tr><td colspan="3" class="empty">暂无数据</td></tr>';
+      el.innerHTML = rows.length ? rows.map(render).join('') : `<tr><td colspan="${colspan}" class="empty">暂无数据</td></tr>`;
     }
     function setLocationRows(rows) {
       const el = $('topLocations');
@@ -1706,6 +1971,61 @@ OPS_HTML = r"""<!doctype html>
     }
     function escapeHtml(s) {
       return String(s || '').replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+    }
+    function renderRegisteredUsers(payload) {
+      const users = Array.isArray(payload?.users) ? payload.users : [];
+      emailState.page = Number(payload?.page || 1);
+      emailState.perPage = Number(payload?.perPage || 20);
+      emailState.hasMore = Boolean(payload?.hasMore);
+      emailState.total = payload?.total ?? null;
+      setRows('registeredUserRows', users, (user) => `<tr><td>${escapeHtml(user.email)}</td><td>${formatDate(user.createdAt)}</td><td>${formatDate(user.lastSignInAt)}</td><td>${user.emailConfirmed ? '已验证' : '待验证'}</td></tr>`, 4);
+      $('emailPrev').disabled = emailState.page <= 1;
+      $('emailNext').disabled = !emailState.hasMore;
+      $('emailPageLabel').textContent = emailState.total == null
+        ? `第 ${emailState.page} 页`
+        : `第 ${emailState.page} 页 · 共 ${fmt(emailState.total)} 个账号`;
+      $('emailStatus').textContent = users.length
+        ? `当前页 ${users.length} 个邮箱 · 数据来自 Supabase Auth`
+        : (payload?.error || '暂无邮箱账号');
+    }
+    async function loadRegisteredUsers(page = emailState.page) {
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value;
+      if (!username || !password) return;
+      $('emailStatus').textContent = '正在加载客户邮箱...';
+      try {
+        const res = await fetch(`/api/analytics/registered-users?page=${encodeURIComponent(page)}&perPage=${emailState.perPage}`, {
+          headers: { 'X-Admin-Username': username, 'X-Admin-Password': password }
+        });
+        const payload = await res.json();
+        if (!res.ok) {
+          $('emailStatus').textContent = payload.error || `邮箱加载失败 ${res.status}`;
+          return;
+        }
+        renderRegisteredUsers(payload);
+      } catch (error) {
+        $('emailStatus').textContent = '邮箱加载失败，请检查网络连接';
+      }
+    }
+    function renderSourceAnalytics() {
+      const data = sourceState.data[sourceState.range] || {};
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const label = sourceState.range === 'month' ? '最近 30 天' : '最近 7 天';
+      $('sourceMeta').textContent = `${label} · 按来源渠道统计`;
+      $('sourcePv').textContent = fmt(data.pv);
+      $('sourceUv').textContent = fmt(data.uv);
+      setRows('sourceAnalyticsRows', rows, (row) => `<tr><td class="source-channel">${escapeHtml(row.channel)}</td><td class="source-detail">${escapeHtml(row.detail)}</td><td class="page-path">${escapeHtml(row.topPath)}</td><td>${fmt(row.pv)}</td><td>${fmt(row.uv)}</td><td class="source-share"><span class="source-share-track"><i style="width:${Math.min(100, Number(row.share || 0))}%"></i></span>${Number(row.share || 0).toFixed(1)}%</td></tr>`, 6);
+    }
+    function selectSourceRange(range) {
+      if (!['sevenDays', 'month'].includes(range)) return;
+      sourceState.range = range;
+      document.querySelectorAll('[data-source-range]').forEach((button) => {
+        const active = button.dataset.sourceRange === range;
+        button.classList.toggle('active', active);
+        button.classList.toggle('secondary', !active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+      renderSourceAnalytics();
     }
     let worldMapLoadPromise = null;
     function projectWorldCoordinate(point) {
@@ -2103,10 +2423,16 @@ OPS_HTML = r"""<!doctype html>
       renderChart();
       renderGeoMap(data.geoWeekly);
       renderPageAnalytics(data.pageToday, data.pageTrend);
+      sourceState.data = data.sourceAnalytics || { sevenDays: {}, month: {} };
+      renderSourceAnalytics();
       setRows('topPages', data.topPages || [], (x) => `<tr><td>${escapeHtml(x.path)}</td><td>${fmt(x.pv)}</td><td>${fmt(x.uv)}</td></tr>`);
       setRows('topReferrers', data.topReferrers || [], (x) => `<tr><td>${escapeHtml(x.referrer)}</td><td>${fmt(x.pv)}</td></tr>`);
       setRows('latest', data.latest || [], (x) => `<tr><td>${new Date(x.ts * 1000).toLocaleString('zh-CN')}</td><td>${escapeHtml(x.event_type)}</td><td>${escapeHtml(x.path)}</td></tr>`);
       setStatus(`已更新 ${new Date(data.generatedAt * 1000).toLocaleString('zh-CN')} · ${data.timezone}`);
+      if (!emailLoaded) {
+        emailLoaded = true;
+        loadRegisteredUsers(1);
+      }
       if (!timer) timer = setInterval(load, 15000);
     }
     $('loginForm').addEventListener('submit', (event) => {
@@ -2117,6 +2443,12 @@ OPS_HTML = r"""<!doctype html>
     $('closeLogin').addEventListener('click', () => setLoginModal(false));
     $('loginBackdrop').addEventListener('click', () => setLoginModal(false));
     $('refresh').addEventListener('click', load);
+    $('emailPrev').addEventListener('click', () => {
+      if (emailState.page > 1) loadRegisteredUsers(emailState.page - 1);
+    });
+    $('emailNext').addEventListener('click', () => {
+      if (emailState.hasMore) loadRegisteredUsers(emailState.page + 1);
+    });
     $('pageTrendSelect').addEventListener('change', (event) => {
       pageChartState.selected = event.target.value;
       $('pageChartMeta').textContent = pageChartState.selected
@@ -2127,6 +2459,9 @@ OPS_HTML = r"""<!doctype html>
     });
     document.querySelectorAll('[data-chart-range]').forEach((button) => {
       button.addEventListener('click', () => selectChartRange(button.dataset.chartRange));
+    });
+    document.querySelectorAll('[data-source-range]').forEach((button) => {
+      button.addEventListener('click', () => selectSourceRange(button.dataset.sourceRange));
     });
     $('trafficChart').addEventListener('pointermove', showChartTooltip);
     $('trafficChart').addEventListener('pointerleave', hideChartTooltip);
@@ -2189,6 +2524,12 @@ class Handler(BaseHTTPRequestHandler):
                 return
             json_response(self, build_stats())
             return
+        if parsed.path == "/api/analytics/registered-users":
+            if not is_authorized(self):
+                json_response(self, {"ok": False, "error": "unauthorized"}, HTTPStatus.UNAUTHORIZED)
+                return
+            fetch_registered_users_for_admin(self, parsed)
+            return
         if parsed.path == "/api/hot-sectors":
             if not authorize_market_request(self):
                 return
@@ -2203,7 +2544,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_HEAD(self):
         parsed = urlparse(self.path)
-        if parsed.path in {"/", "/ops", "/ops/", "/health", "/assets/world-land.json", "/api/analytics/stats"}:
+        if parsed.path in {
+            "/", "/ops", "/ops/", "/health", "/assets/world-land.json",
+            "/api/analytics/stats", "/api/analytics/registered-users",
+        }:
             head_response(self)
             return
         head_response(self, HTTPStatus.NOT_FOUND, "application/json; charset=utf-8")
