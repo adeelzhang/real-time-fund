@@ -619,6 +619,14 @@ def parse_tencent_quote_rows(text):
     return rows
 
 
+def resolve_quote_change(price, pre_close, change, pct):
+    if change is None and price is not None and pre_close is not None:
+        change = price - pre_close
+    if pct is None and change is not None and pre_close not in (None, 0):
+        pct = change / pre_close * 100
+    return change, pct
+
+
 def is_a_stock_trading_time():
     now = datetime.now(get_tz())
     minutes = now.hour * 60 + now.minute
@@ -670,8 +678,10 @@ def fetch_global_quotes(handler):
         for code, provider_code, name, quote_type in group_rows:
             parts = quote_rows.get(provider_code, [])
             price = optional_float(parts[3] if len(parts) > 3 else None)
+            pre_close = optional_float(parts[4] if len(parts) > 4 else None)
             change = optional_float(parts[31] if len(parts) > 31 else None)
             pct = optional_float(parts[32] if len(parts) > 32 else None)
+            change, pct = resolve_quote_change(price, pre_close, change, pct)
             if price is not None:
                 resolved_count += 1
             items.append(
@@ -683,7 +693,7 @@ def fetch_global_quotes(handler):
                     "price": price,
                     "change": change,
                     "pct": pct,
-                    "preClose": optional_float(parts[4] if len(parts) > 4 else None),
+                    "preClose": pre_close,
                     "open": optional_float(parts[5] if len(parts) > 5 else None),
                     "high": optional_float(parts[33] if len(parts) > 33 else None),
                     "low": optional_float(parts[34] if len(parts) > 34 else None),

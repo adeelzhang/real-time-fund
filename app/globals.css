@@ -6533,11 +6533,30 @@ html::-webkit-scrollbar-thumb:active,
   white-space: nowrap;
 }
 
-.global-quote-card > span:last-child {
+.global-quote-change {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   font-size: 12px;
-  font-weight: 600;
   line-height: 1.25;
   font-variant-numeric: tabular-nums;
+}
+
+.global-quote-change small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.global-quote-change b {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .global-quote-name {

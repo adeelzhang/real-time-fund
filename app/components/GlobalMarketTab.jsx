@@ -198,7 +198,10 @@ export default function GlobalMarketTab({ isActive, user, onLogin }) {
                   >
                     <span className="global-quote-name">{quote.name}</span>
                     <strong>{formatNumber(quote.price)}</strong>
-                    <span className={getDeltaClass(quote.pct)}>{formatSigned(quote.pct, '%')}</span>
+                    <span className={`global-quote-change ${getDeltaClass(quote.pct)}`}>
+                      <small>最新涨幅</small>
+                      <b>{formatSigned(quote.pct, '%')}</b>
+                    </span>
                   </button>
                 ))}
               </div>
