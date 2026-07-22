@@ -59,6 +59,7 @@ import { getTagThemeBadgeProps } from '@/app/components/AddTagDialog';
 import { cn } from '@/lib/utils';
 import DataSourceAccuracyBadge from './DataSourceAccuracyBadge';
 import { useDataSourceAccuracyLabels } from '@/app/hooks/useDataSourceAccuracyLabels';
+import { sendAnalytics } from './SelfAnalytics';
 
 const EditModeContext = createContext({ isEditMode: false, selectedCodes: null, toggleSelected: null });
 
@@ -633,6 +634,8 @@ const PcFundTable = memo(function PcFundTable({
   const [cardDialogRow, setCardDialogRow] = useState(null);
   const handleOpenCardDialog = useCallback((row) => {
     setCardDialogRow(row);
+    const code = row?.code || row?.fundCode || row?.CODE || 'unknown';
+    sendAnalytics('screenview', { path: `/overlay/fund-detail/${encodeURIComponent(code)}` });
   }, []);
   const isTableDraggingRef = useRef(false);
   const tableContainerRef = useRef(null);

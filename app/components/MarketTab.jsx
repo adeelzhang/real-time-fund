@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Star,
@@ -32,6 +32,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink } from '@/components/ui/pagination';
+import { sendAnalytics } from './SelfAnalytics';
 
 function FundDetailDialog({ cardDialogRow, getFundCardProps, setCardDialogRow }) {
   const isAnySubModalOpen = useModalStore(
@@ -79,6 +80,12 @@ export default function MarketTab({ onAddFund, getFundCardProps, isActive, fundD
   const [detailFund, setDetailFund] = useState(null);
   const [detailFundExtra, setDetailFundExtra] = useState(null);
   const [pageIndex, setPageIndex] = useState(1);
+
+  const handleOpenDetailFund = useCallback((fund) => {
+    setDetailFund(fund);
+    const code = fund?.bzdm || fund?.code || 'unknown';
+    sendAnalytics('screenview', { path: `/overlay/market-fund/${encodeURIComponent(code)}` });
+  }, []);
 
   useEffect(() => {
     if (detailFund) {
@@ -218,7 +225,7 @@ export default function MarketTab({ onAddFund, getFundCardProps, isActive, fundD
                 </Tooltip>
                 <span
                   className="font-medium text-sm whitespace-normal break-all leading-snug cursor-pointer hover:text-primary transition-colors"
-                  onClick={() => setDetailFund(fund)}
+                  onClick={() => handleOpenDetailFund(fund)}
                 >
                   {fund.jjjc}
                 </span>
@@ -266,7 +273,7 @@ export default function MarketTab({ onAddFund, getFundCardProps, isActive, fundD
     });
 
     return columns;
-  }, [funds, onAddFund]);
+  }, [funds, onAddFund, handleOpenDetailFund]);
 
   const rankingTable = useReactTable({
     data: rankingData || [],

@@ -6,6 +6,7 @@ import { Globe2, LockKeyhole, RefreshCw } from 'lucide-react';
 import { fetchGlobalQuotes } from '../api/fund';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { sendAnalytics } from './SelfAnalytics';
 
 const GLOBAL_MARKET_SECTIONS = [
   { id: 'aStock', title: 'A股指数' },
@@ -187,7 +188,12 @@ export default function GlobalMarketTab({ isActive, user, onLogin }) {
                     type="button"
                     className={`global-quote-card glass ${getDeltaClass(quote.pct)}`}
                     key={quote.code}
-                    onClick={() => setSelectedQuote(quote)}
+                    onClick={() => {
+                      setSelectedQuote(quote);
+                      sendAnalytics('screenview', {
+                        path: `/overlay/global-quote/${encodeURIComponent(quote.code || 'unknown')}`
+                      });
+                    }}
                     aria-label={`查看${quote.name}行情详情`}
                   >
                     <span className="global-quote-name">{quote.name}</span>

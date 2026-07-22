@@ -58,6 +58,7 @@ import {
   PaginationPrevious
 } from '@/components/ui/pagination';
 import { Input } from '@/components/ui/input';
+import { sendAnalytics } from './SelfAnalytics';
 
 const EDIT_MOVE_TO_FRONT_COL = 'editMoveToFront';
 const EDIT_DRAG_COL = 'editDrag';
@@ -930,6 +931,8 @@ const MobileFundTable = memo(function MobileFundTable({
   const [cardSheetRow, setCardSheetRow] = useState(null);
   const handleOpenCardSheet = useCallback((row) => {
     setCardSheetRow(row);
+    const code = row?.code || row?.fundCode || row?.CODE || 'unknown';
+    sendAnalytics('screenview', { path: `/overlay/fund-detail/${encodeURIComponent(code)}` });
   }, []);
 
   const fundCardDrawerOpen = !!(cardSheetRow && getFundCardProps);
