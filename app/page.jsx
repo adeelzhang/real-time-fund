@@ -452,23 +452,33 @@ export default function HomePage() {
   }, [isMobile, dynamicStyleMobile, dynamicStylePc]);
 
   const [mainTab, setMainTab] = useState('home');
-  const [mainTabAnalyticsReady, setMainTabAnalyticsReady] = useState(false);
   const lastTrackedMainTabRef = useRef('');
+
+  const trackMainTab = useCallback((tab) => {
+    if (lastTrackedMainTabRef.current === tab) return;
+    lastTrackedMainTabRef.current = tab;
+    sendAnalytics('screenview', { path: `/tab/${tab}` });
+  }, []);
+
+  const handleMainTabChange = useCallback(
+    (nextTab) => {
+      if (lastTrackedMainTabRef.current === nextTab) return;
+      setMainTab(nextTab);
+      trackMainTab(nextTab);
+    },
+    [trackMainTab]
+  );
 
   useEffect(() => {
     const restoreTab = sessionStorage.getItem('guji-restore-main-tab');
     if (restoreTab === 'mine') {
       sessionStorage.removeItem('guji-restore-main-tab');
       setMainTab('mine');
+      trackMainTab('mine');
+      return;
     }
-    setMainTabAnalyticsReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mainTabAnalyticsReady || lastTrackedMainTabRef.current === mainTab) return;
-    lastTrackedMainTabRef.current = mainTab;
-    sendAnalytics('screenview', { path: `/tab/${mainTab}` });
-  }, [mainTab, mainTabAnalyticsReady]);
+    trackMainTab('home');
+  }, [trackMainTab]);
   const fundDetailStyle = customSettings?.fundDetailStyle === 'classic' ? 'classic' : 'manager';
   const gaussianBlurEnabled = customSettings?.gaussianBlurEnabled !== false;
 
@@ -4719,7 +4729,7 @@ export default function HomePage() {
   return (
     <NavLayout
       mainTab={mainTab}
-      setMainTab={setMainTab}
+      setMainTab={handleMainTabChange}
       isMobile={isMobile}
       containerRef={containerRef}
       containerClassName={containerClassName}
