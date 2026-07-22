@@ -3,9 +3,11 @@ import ipaddress
 import json
 import hmac
 import os
+import re
 import sqlite3
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -37,6 +39,8 @@ AUTH_CACHE_TTL = 45
 REGISTERED_USERS_CACHE_TTL = 300
 MARKET_RATE_LIMIT_SECONDS = 1.0
 GLOBAL_QUOTES_CACHE_TTL = 5.0
+FUND_LATEST_GROWTH_CACHE_TTL = 10 * 60
+FUND_LATEST_GROWTH_FAILURE_TTL = 60
 
 GLOBAL_QUOTE_GROUPS = (
     (
@@ -95,6 +99,9 @@ RATE_LIMITS = {}
 RATE_LIMIT_LOCK = threading.Lock()
 GLOBAL_QUOTES_CACHE = {"expires_at": 0.0, "data": None}
 GLOBAL_QUOTES_CACHE_LOCK = threading.Lock()
+FUND_LATEST_GROWTH_CACHE = {}
+FUND_LATEST_GROWTH_CACHE_LOCK = threading.Lock()
+FUND_LATEST_GROWTH_EXECUTOR = ThreadPoolExecutor(max_workers=6, thread_name_prefix="fund-growth")
 GEOIP_READER = None
 GEOIP_READER_PATH = ""
 GEOIP_READER_LOCK = threading.Lock()
@@ -1291,6 +1298,108 @@ def bounded_int(value, default, min_value, max_value):
     return max(min_value, min(parsed, max_value))
 
 
+def parse_percent_float(value):
+    text = sanitize(value, 32).replace("%", "")
+    if text in {"", "--", "---"}:
+        return None
+    return optional_float(text)
+
+
+def fetch_latest_confirmed_growth(code):
+    now = time.monotonic()
+    with FUND_LATEST_GROWTH_CACHE_LOCK:
+        cached = FUND_LATEST_GROWTH_CACHE.get(code)
+        if cached and cached.get("expires_at", 0) > now:
+            return cached.get("data")
+
+    if len(code) != 6 or not code.isdigit():
+        return None
+
+    api_url = f"https://fund.eastmoney.com/pingzhongdata/{code}.js"
+    req = urllib_request.Request(
+        api_url,
+        headers={
+            "Accept": "application/javascript,text/javascript,*/*",
+            "Referer": f"https://fund.eastmoney.com/{code}.html",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+        },
+    )
+
+    result = None
+    try:
+        with urllib_request.urlopen(req, timeout=8) as response:
+            raw = response.read(2 * 1024 * 1024)
+        script = raw.decode("utf-8-sig", errors="replace")
+        match = re.search(r"var Data_netWorthTrend\s*=\s*(\[.*?\]);", script, re.DOTALL)
+        rows = json.loads(match.group(1)) if match else None
+        normalized = []
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            timestamp = optional_float(row.get("x"))
+            nav = optional_float(row.get("y"))
+            if timestamp is None or nav is None or nav <= 0:
+                continue
+            normalized.append(
+                {
+                    "timestamp": timestamp,
+                    "date": datetime.fromtimestamp(timestamp / 1000, get_tz()).strftime("%Y-%m-%d"),
+                    "nav": nav,
+                    "growth": parse_percent_float(row.get("equityReturn")),
+                }
+            )
+
+        normalized.sort(key=lambda row: row["timestamp"], reverse=True)
+        if normalized:
+            latest = normalized[0]
+            growth = latest["growth"]
+            if growth is None and len(normalized) > 1 and normalized[1]["nav"] > 0:
+                growth = (latest["nav"] - normalized[1]["nav"]) / normalized[1]["nav"] * 100
+            if growth is not None:
+                result = {"growth": growth, "date": latest["date"]}
+    except Exception:
+        result = None
+
+    ttl = FUND_LATEST_GROWTH_CACHE_TTL if result else FUND_LATEST_GROWTH_FAILURE_TTL
+    with FUND_LATEST_GROWTH_CACHE_LOCK:
+        FUND_LATEST_GROWTH_CACHE[code] = {"expires_at": time.monotonic() + ttl, "data": result}
+    return result
+
+
+def enrich_fund_ranking_growth(rows):
+    enriched = [dict(row) if isinstance(row, dict) else row for row in rows]
+    pending = {}
+
+    for index, row in enumerate(enriched):
+        if not isinstance(row, dict):
+            continue
+        current_growth = parse_percent_float(row.get("jzzzl"))
+        if current_growth is not None:
+            row["jzzzl"] = current_growth
+            row["jzzzlDate"] = sanitize(row.get("gxrq"), 10)
+            continue
+        code = sanitize(row.get("bzdm"), 16)
+        if code:
+            pending[FUND_LATEST_GROWTH_EXECUTOR.submit(fetch_latest_confirmed_growth, code)] = index
+
+    for future in as_completed(pending):
+        index = pending[future]
+        try:
+            latest = future.result()
+        except Exception:
+            latest = None
+        if not latest:
+            continue
+        enriched[index]["jzzzl"] = latest["growth"]
+        enriched[index]["jzzzlDate"] = latest["date"]
+
+    return enriched
+
+
 def fetch_fund_valuation_ranking(handler):
     length = int(handler.headers.get("Content-Length", "0") or "0")
     if length < 0 or length > MARKET_MAX_BODY:
@@ -1355,6 +1464,11 @@ def fetch_fund_valuation_ranking(handler):
     if not isinstance(data, dict):
         json_response(handler, {"success": False, "error": "天天基金接口返回格式异常"}, HTTPStatus.BAD_GATEWAY)
         return
+
+    rows = data.get("list")
+    if isinstance(rows, list):
+        data = dict(data)
+        data["list"] = enrich_fund_ranking_growth(rows)
 
     json_response(handler, {"success": True, "data": data})
 

@@ -251,7 +251,7 @@ export default function MarketTab({ onAddFund, getFundCardProps, isActive, fundD
           return (
             <div className="flex flex-col items-end justify-center w-full">
               <span className={cn('text-sm font-medium', getColorClass(fund.jzzzl))}>{formatPercent(fund.jzzzl)}</span>
-              <span className="text-xs opacity-50 mt-0.5">{fund.gxrq?.slice(5)}</span>
+              <span className="text-xs opacity-50 mt-0.5">{(fund.jzzzlDate || fund.gxrq)?.slice(5)}</span>
             </div>
           );
         }
