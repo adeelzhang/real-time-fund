@@ -78,14 +78,14 @@ function getAnalyticsPath() {
   return `${url.pathname}${query ? `?${query}` : ''}`;
 }
 
-export function sendAnalytics(eventType) {
+export function sendAnalytics(eventType, overrides = {}) {
   try {
     const attribution = getAttribution();
     const payload = {
       eventType,
       visitorId: getVisitorId(),
       sessionId: getSessionId(),
-      path: getAnalyticsPath(),
+      path: overrides.path || getAnalyticsPath(),
       referrer: document.referrer || '',
       title: document.title || '',
       screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
@@ -122,6 +122,9 @@ export default function SelfAnalytics() {
       if (lastPathRef.current === path) return;
       lastPathRef.current = path;
       sendAnalytics('pageview');
+      if (window.location.pathname !== '/') {
+        sendAnalytics('screenview', { path: window.location.pathname });
+      }
     };
 
     trackPageView();

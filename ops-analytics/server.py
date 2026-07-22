@@ -1129,6 +1129,11 @@ def build_stats():
             "generatedAt": end,
             "timezone": STATS_TZ,
             "today": metric_for(conn, today_start, end + 1),
+            "todayPageViews": count_row(
+                conn,
+                "SELECT COUNT(*) FROM events WHERE event_type='screenview' AND ts>=? AND ts<?",
+                (today_start, end + 1),
+            ),
             "sevenDays": metric_for(conn, seven_start, end + 1),
             "month": metric_for(conn, month_start, end + 1),
             "realtime": {
@@ -1176,6 +1181,7 @@ def record_event(handler):
 
     if event_type not in {
         "pageview",
+        "screenview",
         "heartbeat",
     }:
         event_type = "pageview"
@@ -1827,6 +1833,7 @@ OPS_HTML = r"""<!doctype html>
   <main>
     <section class="metrics">
       <div class="metric"><div class="label">当前客户量</div><div class="value blue" id="active">0</div><div class="sub">最近 5 分钟活跃 UV</div></div>
+      <div class="metric"><div class="label">今日页面访问总数</div><div class="value green" id="todayPageViews">0</div><div class="sub">首页 / TAB / 页面访问 PV</div></div>
       <div class="metric"><div class="label">今日 PV</div><div class="value green" id="todayPv">0</div><div class="sub">今日 UV <span id="todayUv">0</span></div></div>
       <div class="metric"><div class="label">7 日 PV</div><div class="value violet" id="weekPv">0</div><div class="sub">7 日 UV <span id="weekUv">0</span></div></div>
       <div class="metric"><div class="label">本月 PV</div><div class="value amber" id="monthPv">0</div><div class="sub">本月 UV <span id="monthUv">0</span></div></div>
@@ -2464,6 +2471,7 @@ OPS_HTML = r"""<!doctype html>
       const data = await res.json();
       setLoginModal(false);
       $('active').textContent = fmt(data.realtime.activeVisitors5m);
+      $('todayPageViews').textContent = fmt(data.todayPageViews);
       $('todayPv').textContent = fmt(data.today.pv);
       $('todayUv').textContent = fmt(data.today.uv);
       $('weekPv').textContent = fmt(data.sevenDays.pv);

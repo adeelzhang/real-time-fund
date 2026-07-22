@@ -77,6 +77,7 @@ import {
   useSettingsStore
 } from './stores';
 import ModalsLayer from './components/ModalsLayer';
+import { sendAnalytics } from './components/SelfAnalytics';
 
 function TabCodeLoading() {
   return (
@@ -451,6 +452,8 @@ export default function HomePage() {
   }, [isMobile, dynamicStyleMobile, dynamicStylePc]);
 
   const [mainTab, setMainTab] = useState('home');
+  const [mainTabAnalyticsReady, setMainTabAnalyticsReady] = useState(false);
+  const lastTrackedMainTabRef = useRef('');
 
   useEffect(() => {
     const restoreTab = sessionStorage.getItem('guji-restore-main-tab');
@@ -458,7 +461,14 @@ export default function HomePage() {
       sessionStorage.removeItem('guji-restore-main-tab');
       setMainTab('mine');
     }
+    setMainTabAnalyticsReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!mainTabAnalyticsReady || lastTrackedMainTabRef.current === mainTab) return;
+    lastTrackedMainTabRef.current = mainTab;
+    sendAnalytics('screenview', { path: `/tab/${mainTab}` });
+  }, [mainTab, mainTabAnalyticsReady]);
   const fundDetailStyle = customSettings?.fundDetailStyle === 'classic' ? 'classic' : 'manager';
   const gaussianBlurEnabled = customSettings?.gaussianBlurEnabled !== false;
 
