@@ -1162,6 +1162,22 @@ def build_stats():
         }
 
 
+def build_live_stats():
+    tz = get_tz()
+    now = datetime.now(tz)
+    end = to_ts(now)
+    today_start = to_ts(local_midnight(now))
+    with get_db() as conn:
+        return {
+            "generatedAt": end,
+            "todayPageViews": count_row(
+                conn,
+                "SELECT COUNT(*) FROM events WHERE event_type='screenview' AND ts>=? AND ts<?",
+                (today_start, end + 1),
+            ),
+        }
+
+
 def record_event(handler):
     length = int(handler.headers.get("Content-Length", "0") or "0")
     if length <= 0 or length > MAX_BODY:
@@ -1591,6 +1607,10 @@ OPS_HTML = r"""<!doctype html>
     .label { color: var(--muted); font-size: 13px; }
     .value { margin-top: 8px; font-size: 28px; font-weight: 760; letter-spacing: 0; }
     .value.small { font-size: 18px; line-height: 1.25; }
+    .value.metric-pulse { animation: metric-pulse .65s ease; }
+    @keyframes metric-pulse {
+      35% { color: var(--blue); text-shadow: 0 0 16px rgba(37, 99, 235, .28); }
+    }
     .sub { margin-top: 6px; color: var(--muted); font-size: 12px; }
     .blue { color: var(--blue); } .green { color: var(--green); } .rose { color: var(--rose); }
     .amber { color: var(--amber); } .violet { color: var(--violet); }
@@ -1833,7 +1853,7 @@ OPS_HTML = r"""<!doctype html>
   <main>
     <section class="metrics">
       <div class="metric"><div class="label">当前客户量</div><div class="value blue" id="active">0</div><div class="sub">最近 5 分钟活跃 UV</div></div>
-      <div class="metric"><div class="label">今日页面访问总数</div><div class="value green" id="todayPageViews">0</div><div class="sub">首页 / TAB / 页面访问 PV</div></div>
+      <div class="metric"><div class="label">今日页面总 PV</div><div class="value green" id="todayPageViews">0</div><div class="sub">实时更新 · 含 TAB / 详情浮层 / 行情弹窗</div></div>
       <div class="metric"><div class="label">今日 PV</div><div class="value green" id="todayPv">0</div><div class="sub">今日 UV <span id="todayUv">0</span></div></div>
       <div class="metric"><div class="label">7 日 PV</div><div class="value violet" id="weekPv">0</div><div class="sub">7 日 UV <span id="weekUv">0</span></div></div>
       <div class="metric"><div class="label">本月 PV</div><div class="value amber" id="monthPv">0</div><div class="sub">本月 UV <span id="monthUv">0</span></div></div>
@@ -1998,6 +2018,9 @@ OPS_HTML = r"""<!doctype html>
     const usernameInput = $('username');
     const passwordInput = $('password');
     let timer = null;
+    let liveTimer = null;
+    let liveLoading = false;
+    const todayPageViewsState = { value: null, generatedAt: 0 };
     let chartResizeFrame = null;
     const chartState = {
       range: 'hourly',
@@ -2020,6 +2043,42 @@ OPS_HTML = r"""<!doctype html>
     let emailLoaded = false;
 
     function setStatus(text) { $('status').textContent = text; }
+    function updateTodayPageViews(value, generatedAt = 0, animate = true) {
+      const next = Number(value || 0);
+      const timestamp = Number(generatedAt || 0);
+      if (timestamp && timestamp < todayPageViewsState.generatedAt) return;
+      if (timestamp === todayPageViewsState.generatedAt && todayPageViewsState.value !== null && next < todayPageViewsState.value) return;
+      const increased = todayPageViewsState.value !== null && next > todayPageViewsState.value;
+      todayPageViewsState.value = next;
+      todayPageViewsState.generatedAt = Math.max(todayPageViewsState.generatedAt, timestamp);
+      const element = $('todayPageViews');
+      element.textContent = fmt(next);
+      if (animate && increased) {
+        element.classList.remove('metric-pulse');
+        void element.offsetWidth;
+        element.classList.add('metric-pulse');
+      }
+    }
+    async function loadTodayPageViews() {
+      if (liveLoading) return;
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value;
+      if (!username || !password) return;
+      liveLoading = true;
+      try {
+        const res = await fetch('/api/analytics/live', {
+          cache: 'no-store',
+          headers: { 'X-Admin-Username': username, 'X-Admin-Password': password }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        updateTodayPageViews(data.todayPageViews, data.generatedAt);
+      } catch (error) {
+        // 完整统计轮询仍会继续，单次实时刷新失败不打断管理台。
+      } finally {
+        liveLoading = false;
+      }
+    }
     function formatDate(value) {
       if (!value) return '-';
       const date = new Date(value);
@@ -2471,7 +2530,7 @@ OPS_HTML = r"""<!doctype html>
       const data = await res.json();
       setLoginModal(false);
       $('active').textContent = fmt(data.realtime.activeVisitors5m);
-      $('todayPageViews').textContent = fmt(data.todayPageViews);
+      updateTodayPageViews(data.todayPageViews, data.generatedAt, false);
       $('todayPv').textContent = fmt(data.today.pv);
       $('todayUv').textContent = fmt(data.today.uv);
       $('weekPv').textContent = fmt(data.sevenDays.pv);
@@ -2508,6 +2567,7 @@ OPS_HTML = r"""<!doctype html>
         loadRegisteredUsers(1);
       }
       if (!timer) timer = setInterval(load, 15000);
+      if (!liveTimer) liveTimer = setInterval(loadTodayPageViews, 3000);
     }
     $('loginForm').addEventListener('submit', (event) => {
       event.preventDefault();
@@ -2517,6 +2577,9 @@ OPS_HTML = r"""<!doctype html>
     $('closeLogin').addEventListener('click', () => setLoginModal(false));
     $('loginBackdrop').addEventListener('click', () => setLoginModal(false));
     $('refresh').addEventListener('click', load);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') loadTodayPageViews();
+    });
     $('emailPrev').addEventListener('click', () => {
       if (emailState.page > 1) loadRegisteredUsers(emailState.page - 1);
     });
@@ -2598,6 +2661,12 @@ class Handler(BaseHTTPRequestHandler):
                 return
             json_response(self, build_stats())
             return
+        if parsed.path == "/api/analytics/live":
+            if not is_authorized(self):
+                json_response(self, {"ok": False, "error": "unauthorized"}, HTTPStatus.UNAUTHORIZED)
+                return
+            json_response(self, build_live_stats())
+            return
         if parsed.path == "/api/analytics/registered-users":
             if not is_authorized(self):
                 json_response(self, {"ok": False, "error": "unauthorized"}, HTTPStatus.UNAUTHORIZED)
@@ -2620,7 +2689,7 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path in {
             "/", "/ops", "/ops/", "/health", "/assets/world-land.json",
-            "/api/analytics/stats", "/api/analytics/registered-users",
+            "/api/analytics/stats", "/api/analytics/live", "/api/analytics/registered-users",
         }:
             head_response(self)
             return
