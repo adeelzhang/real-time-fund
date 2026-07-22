@@ -171,6 +171,13 @@ def init_db():
               first_seen INTEGER NOT NULL,
               last_seen INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS visitor_states (
+              visitor_id TEXT PRIMARY KEY,
+              auth_user_id TEXT,
+              has_email_account INTEGER NOT NULL DEFAULT 0,
+              favorite_count INTEGER NOT NULL DEFAULT 0,
+              updated_at INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS geo_cache (
               ip_hash TEXT PRIMARY KEY,
               country_code TEXT,
@@ -185,6 +192,8 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_events_visitor_ts ON events(visitor_id, ts);
             CREATE INDEX IF NOT EXISTS idx_visitors_last_seen ON visitors(last_seen);
             CREATE INDEX IF NOT EXISTS idx_sessions_last_seen ON sessions(last_seen);
+            CREATE INDEX IF NOT EXISTS idx_visitor_states_favorites ON visitor_states(favorite_count);
+            CREATE INDEX IF NOT EXISTS idx_visitor_states_auth_user ON visitor_states(auth_user_id);
             CREATE INDEX IF NOT EXISTS idx_geo_cache_coordinates ON geo_cache(latitude, longitude);
             """
         )
@@ -739,6 +748,49 @@ def count_row(conn, sql, params=()):
     return int(row[0] or 0)
 
 
+def favorite_user_summary(conn):
+    total = count_row(
+        conn,
+        """
+        SELECT COUNT(DISTINCT CASE
+          WHEN has_email_account=1 AND COALESCE(auth_user_id, '')<>'' THEN 'u:' || auth_user_id
+          ELSE 'v:' || visitor_id
+        END)
+        FROM visitor_states
+        WHERE favorite_count>0
+        """,
+    )
+    without_email = count_row(
+        conn,
+        """
+        SELECT COUNT(*)
+        FROM visitor_states
+        WHERE favorite_count>0 AND has_email_account=0
+        """,
+    )
+    return {"total": total, "withoutEmail": without_email}
+
+
+def upsert_visitor_state(conn, visitor_id, auth_user_id, has_email_account, favorite_count, updated_at):
+    conn.execute(
+        """
+        INSERT INTO visitor_states (
+          visitor_id, auth_user_id, has_email_account, favorite_count, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(visitor_id) DO UPDATE SET
+          auth_user_id=CASE
+            WHEN excluded.auth_user_id<>'' THEN excluded.auth_user_id
+            ELSE visitor_states.auth_user_id
+          END,
+          has_email_account=MAX(visitor_states.has_email_account, excluded.has_email_account),
+          favorite_count=excluded.favorite_count,
+          updated_at=excluded.updated_at
+        """,
+        (visitor_id, auth_user_id, has_email_account, favorite_count, updated_at),
+    )
+
+
 def metric_for(conn, start_ts, end_ts):
     return {
         "pv": count_row(
@@ -1160,6 +1212,7 @@ def build_stats():
                 "totalSessions": count_row(conn, "SELECT COUNT(*) FROM sessions"),
             },
             "registeredUsers": fetch_registered_users_summary(),
+            "favoriteUsers": favorite_user_summary(conn),
             "newVisitors": {
                 "today": count_row(conn, "SELECT COUNT(*) FROM visitors WHERE first_seen>=?", (today_start,)),
                 "sevenDays": count_row(conn, "SELECT COUNT(*) FROM visitors WHERE first_seen>=?", (seven_start,)),
@@ -1216,6 +1269,7 @@ def record_event(handler):
         "pageview",
         "screenview",
         "heartbeat",
+        "user_state",
     }:
         event_type = "pageview"
 
@@ -1247,25 +1301,31 @@ def record_event(handler):
         "screen": sanitize(payload.get("screen"), 64),
         "tz": sanitize(payload.get("tz"), 64),
     }
+    favorite_count = bounded_int(payload.get("favoriteCount"), 0, 0, 10000)
+    has_email_account = 1 if payload.get("hasEmailAccount") is True else 0
+    auth_user_id = sanitize(payload.get("authUserId"), 128) if has_email_account else ""
 
     with get_db() as conn:
         if event_type == "pageview":
             cache_geoip(conn, raw_ip, row["ip_hash"], ts)
-        conn.execute(
-            """
-            INSERT INTO events (
-              ts,event_type,visitor_id,session_id,path,landing_path,referrer,
-              utm_source,utm_medium,utm_campaign,utm_content,utm_term,
-              title,user_agent,ip_hash,screen,tz
+        if event_type == "user_state":
+            upsert_visitor_state(conn, visitor_id, auth_user_id, has_email_account, favorite_count, ts)
+        else:
+            conn.execute(
+                """
+                INSERT INTO events (
+                  ts,event_type,visitor_id,session_id,path,landing_path,referrer,
+                  utm_source,utm_medium,utm_campaign,utm_content,utm_term,
+                  title,user_agent,ip_hash,screen,tz
+                )
+                VALUES (
+                  :ts,:event_type,:visitor_id,:session_id,:path,:landing_path,:referrer,
+                  :utm_source,:utm_medium,:utm_campaign,:utm_content,:utm_term,
+                  :title,:user_agent,:ip_hash,:screen,:tz
+                )
+                """,
+                row,
             )
-            VALUES (
-              :ts,:event_type,:visitor_id,:session_id,:path,:landing_path,:referrer,
-              :utm_source,:utm_medium,:utm_campaign,:utm_content,:utm_term,
-              :title,:user_agent,:ip_hash,:screen,:tz
-            )
-            """,
-            row,
-        )
         conn.execute(
             """
             INSERT INTO visitors (visitor_id, first_seen, last_seen, last_path, user_agent, ip_hash)
@@ -1983,6 +2043,8 @@ OPS_HTML = r"""<!doctype html>
       <div class="metric"><div class="label">本月 PV</div><div class="value amber" id="monthPv">0</div><div class="sub">本月 UV <span id="monthUv">0</span></div></div>
       <div class="metric"><div class="label">活跃会话</div><div class="value rose" id="sessions">0</div><div class="sub">最近 30 分钟</div></div>
       <div class="metric"><div class="label">累计客户</div><div class="value" id="totalVisitors">0</div><div class="sub">今日新客 <span id="newToday">0</span></div></div>
+      <div class="metric"><div class="label">已添加自选基金</div><div class="value violet" id="favoriteUsers">0</div><div class="sub">自选基金数量大于 0 的去重客户</div></div>
+      <div class="metric"><div class="label">自选客户未注册</div><div class="value amber" id="favoriteUsersWithoutEmail">0</div><div class="sub">已添加自选但未邮箱注册</div></div>
       <div class="metric"><div class="label">已注册客户</div><div class="value blue" id="registeredUsers">0</div><div class="sub" id="registeredUsersSub">邮箱注册账号</div></div>
     </section>
 
@@ -2664,6 +2726,9 @@ OPS_HTML = r"""<!doctype html>
       $('sessions').textContent = fmt(data.realtime.activeSessions30m);
       $('totalVisitors').textContent = fmt(data.realtime.totalVisitors);
       $('newToday').textContent = fmt(data.newVisitors.today);
+      const favoriteUsers = data.favoriteUsers || {};
+      $('favoriteUsers').textContent = fmt(favoriteUsers.total || 0);
+      $('favoriteUsersWithoutEmail').textContent = fmt(favoriteUsers.withoutEmail || 0);
       const registered = data.registeredUsers || {};
       const registeredEl = $('registeredUsers');
       const registeredSubEl = $('registeredUsersSub');

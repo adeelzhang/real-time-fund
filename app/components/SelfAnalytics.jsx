@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useStorageStore, useUserStore } from '../stores';
 
 const VISITOR_KEY = 'guji_visitor_id';
 const SESSION_KEY = 'guji_session_id';
@@ -97,6 +98,11 @@ export function sendAnalytics(eventType, overrides = {}) {
       utmTerm: attribution.utm_term || '',
       attributionLandingPath: attribution.landingPath || ''
     };
+    if (eventType === 'user_state') {
+      payload.favoriteCount = Math.max(0, Number(overrides.favoriteCount) || 0);
+      payload.authUserId = cleanAttributionValue(overrides.authUserId, 128);
+      payload.hasEmailAccount = overrides.hasEmailAccount === true;
+    }
     const body = JSON.stringify(payload);
     if (navigator.sendBeacon) {
       const blob = new Blob([body], { type: 'application/json' });
@@ -115,6 +121,9 @@ export function sendAnalytics(eventType, overrides = {}) {
 
 export default function SelfAnalytics() {
   const lastPathRef = useRef('');
+  const lastUserStateRef = useRef('');
+  const favoriteCount = useStorageStore((state) => state.favorites?.size || 0);
+  const user = useUserStore((state) => state.user);
 
   useEffect(() => {
     const trackPageView = () => {
@@ -142,6 +151,24 @@ export default function SelfAnalytics() {
       window.removeEventListener('popstate', trackPageView);
     };
   }, []);
+
+  useEffect(() => {
+    const authUserId = user?.id || '';
+    const hasEmailAccount = Boolean(user?.email);
+    const stateKey = `${favoriteCount}:${authUserId}:${hasEmailAccount ? 1 : 0}`;
+    if (lastUserStateRef.current === stateKey) return;
+    lastUserStateRef.current = stateKey;
+
+    const timer = window.setTimeout(() => {
+      sendAnalytics('user_state', {
+        favoriteCount,
+        authUserId,
+        hasEmailAccount
+      });
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [favoriteCount, user?.email, user?.id]);
 
   return null;
 }
